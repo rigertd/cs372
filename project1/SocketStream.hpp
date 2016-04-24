@@ -6,8 +6,7 @@ class SocketStream {
     private:
         int _sd;
     public:
-        SocketStream(int sock_desc)
-            : _sd(sock_desc) {}
+        SocketStream(int sock_desc);
         
         bool send(std::string data);
         bool recv(std::string& buffer);

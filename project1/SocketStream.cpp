@@ -2,6 +2,7 @@
 
 #include <cerrno>
 #include <cstring>
+#include <fcntl.h>
 #include <sys/types.h>
 #include <sys/socket.h> // recv, send
 #include <unistd.h>     // close
@@ -9,6 +10,11 @@
 #include <stdexcept>
 
 #define BUFFER_SIZE 500
+
+SocketStream::SocketStream(int sock_desc) {
+    _sd = sock_desc;
+    fcntl(_sd, F_SETFL, O_NONBLOCK);
+}
 
 bool SocketStream::send(std::string data) {
     ssize_t bytes;

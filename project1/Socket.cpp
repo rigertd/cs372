@@ -30,7 +30,7 @@ void Socket::listen(const char* port) {
     // Zero-initialize and set addrinfo structure
     std::memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC;    // IPv4 or IPv6, whichever is available
-    hints.ai_socktype = SOCK_STREAM | SOCK_NONBLOCK; // Non-blocking TCP
+    hints.ai_socktype = SOCK_STREAM; // Non-blocking TCP
     hints.ai_flags = AI_PASSIVE;    // Use localhost IP
 
     // Look up the localhost address info

@@ -9,6 +9,6 @@ class SocketStream {
         SocketStream(int sock_desc)
             : _sd(sock_desc) {}
         
-        int send(std::string data);
-        int recv(std::string& buffer);
+        bool send(std::string data);
+        bool recv(std::string& buffer);
 };

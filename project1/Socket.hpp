@@ -8,13 +8,15 @@
 #define SOCKET_CONNECTION_QUEUE 10
 #endif
 
+class SocketStream;
+
 class Socket {
     public:
         Socket(int queuelen = SOCKET_CONNECTION_QUEUE);
         ~Socket();
         
         void listen(const char* port);
-        Socket accept();
+        SocketStream accept();
         void connect(const char* host, const char* port);
 
     private:
@@ -22,5 +24,5 @@ class Socket {
         int _queue_len;
         std::string _dest_host;
         std::string _dest_port;
-        struct addrinfo* _info
+        struct addrinfo* _info;
 };

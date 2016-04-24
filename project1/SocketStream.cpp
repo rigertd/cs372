@@ -1,10 +1,12 @@
 #include "SocketStream.hpp"
 
 #include <cerrno>
+#include <cstring>
 #include <sys/types.h>
 #include <sys/socket.h> // recv, send
 #include <unistd.h>     // close
 #include <exception>
+#include <stdexcept>
 
 #define BUFFER_SIZE 500
 

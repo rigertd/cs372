@@ -4,7 +4,8 @@
 #include <cerrno>
 #include <netdb.h>
 #include <cstring>
-#inlcude <exception>
+#include <exception>
+#include <stdexcept>
 
 #include "SocketStream.hpp"
 
@@ -18,7 +19,7 @@ Socket::~Socket() {
     if (_info != nullptr) ::freeaddrinfo(_info);
 }
 
-void Socket::listen(const char* port, int queuelen) {
+void Socket::listen(const char* port) {
     struct addrinfo hints;
     struct addrinfo *current = nullptr;
     int yes = 1;
@@ -29,7 +30,7 @@ void Socket::listen(const char* port, int queuelen) {
     // Zero-initialize and set addrinfo structure
     std::memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC;    // IPv4 or IPv6, whichever is available
-    hints.ai_socktype = SOCK_STREAM | SOCK_NONBLOCK // Non-blocking TCP
+    hints.ai_socktype = SOCK_STREAM | SOCK_NONBLOCK; // Non-blocking TCP
     hints.ai_flags = AI_PASSIVE;    // Use localhost IP
 
     // Look up the localhost address info
@@ -49,7 +50,7 @@ void Socket::listen(const char* port, int queuelen) {
         }
 
         // Attempt to reuse the socket if it's already in use
-        if (::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1) {
+        if (::setsockopt(_sd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1) {
             errmsg = "setsockopt: ";
             errmsg += ::strerror(errno);
             throw std::runtime_error(errmsg);
@@ -82,13 +83,13 @@ void Socket::listen(const char* port, int queuelen) {
     }
 }
 
-SocketStream::SocketStream Socket::accept() {
+SocketStream Socket::accept() {
     int new_sd;
     struct sockaddr_storage remote_addr;
     socklen_t sin_size = sizeof(remote_addr);
     char s[INET6_ADDRSTRLEN];
     
-    new_sd = ::accept(_sd, static_cast<struct sockaddr*>(&remote_addr), &sin_size);
+    new_sd = ::accept(_sd, reinterpret_cast<struct sockaddr*>(&remote_addr), &sin_size);
     if (new_sd < 0) {
         std::string errmsg("accept: ");
         errmsg += ::strerror(errno);

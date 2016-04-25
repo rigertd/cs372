@@ -10,4 +10,5 @@ class SocketStream {
         
         bool send(std::string data);
         bool recv(std::string& buffer);
+        void close();
 };

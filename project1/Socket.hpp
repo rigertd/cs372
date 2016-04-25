@@ -17,7 +17,7 @@ class Socket {
         
         void listen(const char* port);
         SocketStream accept();
-        void connect(const char* host, const char* port);
+        SocketStream connect(const char* host, const char* port);
 
     private:
         int _sd;
@@ -25,4 +25,6 @@ class Socket {
         std::string _dest_host;
         std::string _dest_port;
         struct addrinfo* _info;
+        
+        void store_remote_addr(struct sockaddr_storage* sas);
 };

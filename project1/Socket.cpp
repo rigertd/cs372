@@ -2,6 +2,7 @@
 
 #include <unistd.h>
 #include <cerrno>
+#include <netinet/in.h>
 #include <netdb.h>
 #include <cstring>
 #include <exception>
@@ -95,10 +96,82 @@ SocketStream Socket::accept() {
         errmsg += ::strerror(errno);
         throw std::runtime_error(errmsg);
     }
+    
+    // Store the remote IP info
+    store_remote_addr(&remote_addr);
 
     return SocketStream(new_sd);
 }
 
-void Socket::connect(const char* host, const char* port) {
+SocketStream Socket::connect(const char* host, const char* port) {
+    struct addrinfo hints;
+    struct addrinfo *current = nullptr;
+    int retval;
+    std::string errmsg;
+    
+
+    // Zero-initialize and set addrinfo structure
+    std::memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;    // IPv4 or IPv6, whichever is available
+    hints.ai_socktype = SOCK_STREAM; // Non-blocking TCP
+
+    // Look up the remote host address info
+    retval = ::getaddrinfo(host, port, &hints, &_info);
+    if (retval != 0) {
+        errmsg = "getaddrinfo: ";
+        errmsg += ::gai_strerror(retval);
+        throw std::runtime_error(errmsg);
+    }
+
+    // Loop through address structure results until connect succeeds
+    for (current = _info; current != NULL; current = current->ai_next) {
+        // Attempt to open a socket based on the remote host's address info
+        _sd = ::socket(current->ai_family, current->ai_socktype, current->ai_protocol);
+        if (_sd == -1) {
+            continue; // Try next on error
+        }
+        
+        if (::connect(_sd, current->ai_addr, current->ai_addrlen) == -1) {
+            ::close(_sd);
+            continue;
+        }
+        
+        // connect succeeded
+        break;
+    }
+    
+    // Throw an exception if connect failed on all returned addresses
+    if (current == NULL) {
+        errmsg = "connect: No valid address found";
+        throw std::runtime_error(errmsg);
+    }
+
+    // Store the remote IP info
+    store_remote_addr(reinterpret_cast<struct sockaddr_storage*>(current->ai_addr));
+
+    // Free memory used by remote host's address info
+    ::freeaddrinfo(_info);
+    _info = nullptr;
+    
+    return SocketStream(_sd);
 }
 
+
+void Socket::store_remote_addr(struct sockaddr_storage* sas) {
+    char s[INET6_ADDRSTRLEN];
+    void* in_addr = nullptr;
+    
+    if (sas->sa_family == AF_INET) {
+        struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(sas);
+        in_addr = reinterpret_cast<void*>(addr->sin_addr);
+        _dest_port.assign(std::to_string(ntohs(addr->sin_port)));
+    }
+    else {
+        struct sockaddr_in6* addr = reinterpret_cast<struct sockaddr_in6*>(sas);
+        in_addr = reinterpret_cast<void*>(addr->sin6_addr);
+        _dest_port.assign(std::to_string(ntohs(addr->sin6_port)));
+    }
+
+    inet_ntop(sas->ss_family, in_addr, s, sizeof(s));
+    _dest_host.assign(s);
+}

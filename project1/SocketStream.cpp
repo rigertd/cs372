@@ -79,3 +79,7 @@ bool SocketStream::recv(std::string& buffer) {
     // Return true if socket is still open
     return true;
 }
+
+void SocketStream::close() {
+    ::close(_sd);
+}

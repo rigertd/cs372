@@ -18,6 +18,9 @@ class Socket {
         void listen(const char* port);
         SocketStream accept();
         SocketStream connect(const char* host, const char* port);
+        
+        std::string get_dest_host() { return _dest_host; }
+        std::string get_dest_port() { return _dest_port; }
 
     private:
         int _sd;

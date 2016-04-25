@@ -1,5 +1,6 @@
 #include "SocketStream.hpp"
 
+#include <iostream>
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
@@ -53,7 +54,7 @@ bool SocketStream::recv(std::string& buffer) {
 
     /* Keep trying until all data is received */
     while (true) {
-        bytes = ::recv(_sd, buf, BUFFER_SIZE, 0);
+        bytes = ::recv(_sd, buf, BUFFER_SIZE - 1, 0);
         // Socket was closed, return false
         if (bytes == 0) {
             return false;
@@ -73,6 +74,7 @@ bool SocketStream::recv(std::string& buffer) {
                 throw std::runtime_error(errmsg);
             }
         }
+        buf[bytes] = '\0';
         buffer += buf;
     }
 

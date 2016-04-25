@@ -26,5 +26,5 @@ class Socket {
         std::string _dest_port;
         struct addrinfo* _info;
         
-        void store_remote_addr(struct sockaddr_storage* sas);
+        void store_remote_addr(struct sockaddr* sa);
 };

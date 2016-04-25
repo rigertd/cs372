@@ -4,6 +4,7 @@
 #include <cerrno>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <arpa/inet.h>
 #include <cstring>
 #include <exception>
 #include <stdexcept>
@@ -98,7 +99,7 @@ SocketStream Socket::accept() {
     }
     
     // Store the remote IP info
-    store_remote_addr(&remote_addr);
+    store_remote_addr(reinterpret_cast<struct sockaddr*>(&remote_addr));
 
     return SocketStream(new_sd);
 }
@@ -147,7 +148,7 @@ SocketStream Socket::connect(const char* host, const char* port) {
     }
 
     // Store the remote IP info
-    store_remote_addr(reinterpret_cast<struct sockaddr_storage*>(current->ai_addr));
+    store_remote_addr(reinterpret_cast<struct sockaddr*>(current->ai_addr));
 
     // Free memory used by remote host's address info
     ::freeaddrinfo(_info);
@@ -157,21 +158,21 @@ SocketStream Socket::connect(const char* host, const char* port) {
 }
 
 
-void Socket::store_remote_addr(struct sockaddr_storage* sas) {
+void Socket::store_remote_addr(struct sockaddr* sa) {
     char s[INET6_ADDRSTRLEN];
     void* in_addr = nullptr;
     
-    if (sas->sa_family == AF_INET) {
-        struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(sas);
-        in_addr = reinterpret_cast<void*>(addr->sin_addr);
+    if (sa->sa_family == AF_INET) {
+        struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(sa);
+        in_addr = reinterpret_cast<void*>(&addr->sin_addr);
         _dest_port.assign(std::to_string(ntohs(addr->sin_port)));
     }
     else {
-        struct sockaddr_in6* addr = reinterpret_cast<struct sockaddr_in6*>(sas);
-        in_addr = reinterpret_cast<void*>(addr->sin6_addr);
+        struct sockaddr_in6* addr = reinterpret_cast<struct sockaddr_in6*>(sa);
+        in_addr = reinterpret_cast<void*>(&addr->sin6_addr);
         _dest_port.assign(std::to_string(ntohs(addr->sin6_port)));
     }
 
-    inet_ntop(sas->ss_family, in_addr, s, sizeof(s));
+    ::inet_ntop(sa->sa_family, in_addr, s, sizeof(s));
     _dest_host.assign(s);
 }

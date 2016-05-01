@@ -1,13 +1,25 @@
+/*********************************************************\
+* Author:       David Rigert
+* Class:        CS372 Spring 2016
+* Assignment:   Project 1
+* File:         Socket.hpp
+* Description:  Defines the class used for interacting with
+*               a socket before a connection is established.
+*               This class is intended for use by a server and
+*               only accepts incoming connections.
+\*********************************************************/
 #pragma once
 
 #include <string>
 #include <sys/types.h>
 #include <sys/socket.h> /* SOCK_STREAM */
 
+// Define a maximum connection queue of 10 unless defined elsewhere
 #ifndef SOCKET_CONNECTION_QUEUE
 #define SOCKET_CONNECTION_QUEUE 10
 #endif
 
+// Forward declaration
 class SocketStream;
 
 class Socket {
@@ -17,17 +29,11 @@ class Socket {
         
         void listen(const char* port);
         SocketStream accept();
-        SocketStream connect(const char* host, const char* port);
-        
-        std::string get_dest_host() { return _dest_host; }
-        std::string get_dest_port() { return _dest_port; }
 
     private:
-        int _sd;
-        int _queue_len;
-        std::string _dest_host;
-        std::string _dest_port;
-        struct addrinfo* _info;
+        int _sd;                // Underlying socket descriptor
+        int _queue_len;         // Max incoming connections to queue
+        struct addrinfo* _info; // Used for address info lookup
         
-        void store_remote_addr(struct sockaddr* sa);
+        void get_remote_addr(struct sockaddr*, std::string&, std::string&);
 };

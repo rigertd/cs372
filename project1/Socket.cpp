@@ -1,3 +1,10 @@
+/*********************************************************\
+* Author:       David Rigert
+* Class:        CS372 Spring 2016
+* Assignment:   Project 1
+* File:         Socket.cpp
+* Description:  Implementation file for Socket.hpp
+\*********************************************************/
 #include "Socket.hpp"
 
 #include <unistd.h>
@@ -11,16 +18,31 @@
 
 #include "SocketStream.hpp"
 
+/**
+ * Constructor. Sets the maximum queue for incoming connections.
+ *
+ *  queuelen   The queue size for incoming connections.
+ */
 Socket::Socket(int queuelen) {
     _queue_len = queuelen;
     _info = nullptr;
 }
 
+/**
+ * Destructor. Closes the socket and frees memory allocated for address info.
+ */
 Socket::~Socket() {
     ::close(_sd);
     if (_info != nullptr) ::freeaddrinfo(_info);
 }
 
+/**
+ * Configures the socket to listen for connections on the specified port.
+ *
+ * This function throws a runtime_error exception if any of the steps fail.
+ *
+ *  port   The port to listen for connections on.
+ */
 void Socket::listen(const char* port) {
     struct addrinfo hints;
     struct addrinfo *current = nullptr;
@@ -85,11 +107,17 @@ void Socket::listen(const char* port) {
     }
 }
 
+/**
+ * Accepts an incoming connection.
+ *
+ * This function throws a runtime_error exception if any of the steps fail.
+ *
+ * Returns a SocketStream for the new connection.
+ */
 SocketStream Socket::accept() {
     int new_sd;
     struct sockaddr_storage remote_addr;
     socklen_t sin_size = sizeof(remote_addr);
-    char s[INET6_ADDRSTRLEN];
     
     new_sd = ::accept(_sd, reinterpret_cast<struct sockaddr*>(&remote_addr), &sin_size);
     if (new_sd < 0) {
@@ -98,81 +126,39 @@ SocketStream Socket::accept() {
         throw std::runtime_error(errmsg);
     }
     
-    // Store the remote IP info
-    store_remote_addr(reinterpret_cast<struct sockaddr*>(&remote_addr));
+    // Get the remote IP and port information
+    std::string host, port;
+    get_remote_addr(reinterpret_cast<struct sockaddr*>(&remote_addr), host, port);
 
-    return SocketStream(new_sd);
+    return SocketStream(new_sd, host, port);
 }
 
-SocketStream Socket::connect(const char* host, const char* port) {
-    struct addrinfo hints;
-    struct addrinfo *current = nullptr;
-    int retval;
-    std::string errmsg;
-    
-
-    // Zero-initialize and set addrinfo structure
-    std::memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;    // IPv4 or IPv6, whichever is available
-    hints.ai_socktype = SOCK_STREAM; // Non-blocking TCP
-
-    // Look up the remote host address info
-    retval = ::getaddrinfo(host, port, &hints, &_info);
-    if (retval != 0) {
-        errmsg = "getaddrinfo: ";
-        errmsg += ::gai_strerror(retval);
-        throw std::runtime_error(errmsg);
-    }
-
-    // Loop through address structure results until connect succeeds
-    for (current = _info; current != NULL; current = current->ai_next) {
-        // Attempt to open a socket based on the remote host's address info
-        _sd = ::socket(current->ai_family, current->ai_socktype, current->ai_protocol);
-        if (_sd == -1) {
-            continue; // Try next on error
-        }
-        
-        if (::connect(_sd, current->ai_addr, current->ai_addrlen) == -1) {
-            ::close(_sd);
-            continue;
-        }
-        
-        // connect succeeded
-        break;
-    }
-    
-    // Throw an exception if connect failed on all returned addresses
-    if (current == NULL) {
-        errmsg = "connect: No valid address found";
-        throw std::runtime_error(errmsg);
-    }
-
-    // Store the remote IP info
-    store_remote_addr(reinterpret_cast<struct sockaddr*>(current->ai_addr));
-
-    // Free memory used by remote host's address info
-    ::freeaddrinfo(_info);
-    _info = nullptr;
-    
-    return SocketStream(_sd);
-}
-
-
-void Socket::store_remote_addr(struct sockaddr* sa) {
-    char s[INET6_ADDRSTRLEN];
+/**
+ * Gets the remote host IP address and port.
+ *
+ * This function extracts the information for both IPv4 and IPv6 connections.
+ *
+ *  sa      The sockaddr struct to parse for the information.
+ *  host    The string to store the IP address.
+ *  port    The string to store the port number.
+ */
+void Socket::get_remote_addr(struct sockaddr* sa, std::string& host, std::string& port) {
+    char s[INET6_ADDRSTRLEN]; // temp storage buffer for IP address
     void* in_addr = nullptr;
     
+    // IPv4 connection
     if (sa->sa_family == AF_INET) {
         struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(sa);
         in_addr = reinterpret_cast<void*>(&addr->sin_addr);
-        _dest_port.assign(std::to_string(ntohs(addr->sin_port)));
+        port.assign(std::to_string(ntohs(addr->sin_port)));
     }
+    // IPv6 connection
     else {
         struct sockaddr_in6* addr = reinterpret_cast<struct sockaddr_in6*>(sa);
         in_addr = reinterpret_cast<void*>(&addr->sin6_addr);
-        _dest_port.assign(std::to_string(ntohs(addr->sin6_port)));
+        port.assign(std::to_string(ntohs(addr->sin6_port)));
     }
 
     ::inet_ntop(sa->sa_family, in_addr, s, sizeof(s));
-    _dest_host.assign(s);
+    host.assign(s);
 }

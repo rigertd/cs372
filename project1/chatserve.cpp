@@ -94,8 +94,8 @@ int main(int argc, char* argv[]) {
         try {
             SocketStream ss = s.accept();
             std::cout << std::endl
-                << "Accepted connection from: " << s.get_dest_host() << ":"
-                << s.get_dest_port() << std::endl;
+                << "Accepted connection from: " << ss.get_hostname() << ":"
+                << ss.get_port() << std::endl;
 
             // Add new socket to list of currently connected clients
             std::lock_guard<std::mutex> guard(clients_mutex);
@@ -170,6 +170,9 @@ void handle_clients(std::string prompt) {
                 auto it = clients.begin();
                 while (it != clients.end()) {
                     it->close();
+                    std::cout << std::endl
+                        << it->get_hostname() << ":" << it->get_port()
+                        << " disconnected" << std::endl;
                     it = clients.erase(it);
                 }
 
@@ -207,6 +210,9 @@ void handle_clients(std::string prompt) {
             }
             else {
                 // Socket closed -- remove client
+                std::cout << std::endl
+                    << it->get_hostname() << ":" << it->get_port()
+                    << " disconnected" << std::endl;
                 it = clients.erase(it);
             }
         }

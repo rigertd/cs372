@@ -1,3 +1,10 @@
+/*********************************************************\
+* Author:       David Rigert
+* Class:        CS372 Spring 2016
+* Assignment:   Project 1
+* File:         SocketStream.cpp
+* Description:  Implementation file for SocketStream.hpp
+\*********************************************************/
 #include "SocketStream.hpp"
 
 #include <iostream>
@@ -10,13 +17,35 @@
 #include <exception>
 #include <stdexcept>
 
+// Define buffer size of 500 + 1 for null terminator
 #define BUFFER_SIZE 501
 
-SocketStream::SocketStream(int sock_desc) {
+/**
+ * Constructor. Sets the underlying socket descriptor and it to non-blocking.
+ *
+ *  sock_desc   The socket descriptor to use.
+ *  hostname    The hostname of the connected client.
+ *  port        The port number of the connected client.
+ */
+SocketStream::SocketStream(int sock_desc, std::string hostname, std::string port) {
     _sd = sock_desc;
+    _hostname = hostname;
+    _port = port;
+    
+    // Set socket to be non-blocking for receives
     fcntl(_sd, F_SETFL, O_NONBLOCK);
 }
 
+/**
+ * Sends the specified data to the connected host.
+ *
+ * This function continues to send until all data has been sent
+ * or the socket is closed.
+ *
+ *  data    The data to send over the socket.
+ *
+ * Returns whether the socket is still open.
+ */
 bool SocketStream::send(std::string data) {
     ssize_t bytes;
 
@@ -47,6 +76,17 @@ bool SocketStream::send(std::string data) {
     return true;
 }
 
+/**
+ * Receives any data available from the connected host.
+ *
+ * This function receives whatever data is available without blocking.
+ * If no data is available, buffer is set to an empty string
+ * and the function returns true.
+ *
+ *  buffer  A string buffer to store the received data.
+ *
+ * Returns whether the socket is still open.
+ */
 bool SocketStream::recv(std::string& buffer) {
     ssize_t bytes;
     char buf[BUFFER_SIZE];
@@ -82,6 +122,13 @@ bool SocketStream::recv(std::string& buffer) {
     return true;
 }
 
+/**
+ * Closes the socket.
+ *
+ * This function immediately closes the underlying socket descriptor.
+ * The object can no longer be used for sending or receiving after
+ * this function is called.
+ */
 void SocketStream::close() {
     ::close(_sd);
 }

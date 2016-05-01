@@ -42,7 +42,7 @@ void handle_clients(std::string prompt) {
             out_message = outgoing.dequeue();
             
             // If \quit is entered, disconnect all clients
-            if (out_message == "\\quit") {
+            if (out_message == prompt + "\\quit") {
                 // Clear queued messages
                 while (!outgoing.empty())
                     outgoing.dequeue();

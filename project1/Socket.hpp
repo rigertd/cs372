@@ -26,7 +26,7 @@ class Socket {
     public:
         Socket(int queuelen = SOCKET_CONNECTION_QUEUE);
         ~Socket();
-        
+
         void listen(const char* port);
         SocketStream accept();
 
@@ -34,6 +34,6 @@ class Socket {
         int _sd;                // Underlying socket descriptor
         int _queue_len;         // Max incoming connections to queue
         struct addrinfo* _info; // Used for address info lookup
-        
+
         void get_remote_addr(struct sockaddr*, std::string&, std::string&);
 };

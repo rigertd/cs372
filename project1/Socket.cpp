@@ -49,7 +49,6 @@ void Socket::listen(const char* port) {
     int yes = 1;
     int retval;
     std::string errmsg;
-    
 
     // Zero-initialize and set addrinfo structure
     std::memset(&hints, 0, sizeof(hints));
@@ -118,14 +117,14 @@ SocketStream Socket::accept() {
     int new_sd;
     struct sockaddr_storage remote_addr;
     socklen_t sin_size = sizeof(remote_addr);
-    
+
     new_sd = ::accept(_sd, reinterpret_cast<struct sockaddr*>(&remote_addr), &sin_size);
     if (new_sd < 0) {
         std::string errmsg("accept: ");
         errmsg += ::strerror(errno);
         throw std::runtime_error(errmsg);
     }
-    
+
     // Get the remote IP and port information
     std::string host, port;
     get_remote_addr(reinterpret_cast<struct sockaddr*>(&remote_addr), host, port);
@@ -145,7 +144,7 @@ SocketStream Socket::accept() {
 void Socket::get_remote_addr(struct sockaddr* sa, std::string& host, std::string& port) {
     char s[INET6_ADDRSTRLEN]; // temp storage buffer for IP address
     void* in_addr = nullptr;
-    
+
     // IPv4 connection
     if (sa->sa_family == AF_INET) {
         struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(sa);

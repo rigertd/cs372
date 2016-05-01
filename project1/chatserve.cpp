@@ -215,7 +215,7 @@ void handle_clients(std::string prompt) {
                     << it->get_hostname() << ":" << it->get_port()
                     << " disconnected" << std::endl;
                 it = clients.erase(it);
-                
+
                 // Treat this as a received message if there are still clients
                 // connected so the prompt will be redisplayed.
                 received = !clients.empty();

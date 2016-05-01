@@ -13,11 +13,11 @@
 class SocketStream {
     public:
         SocketStream(int, std::string, std::string);
-        
+
         bool send(std::string data);
         bool recv(std::string& buffer);
         void close();
-        
+
         std::string get_hostname() { return _hostname; }
         std::string get_port() { return _port; }
 

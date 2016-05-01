@@ -31,7 +31,7 @@ SocketStream::SocketStream(int sock_desc, std::string hostname, std::string port
     _sd = sock_desc;
     _hostname = hostname;
     _port = port;
-    
+
     // Set socket to be non-blocking for receives
     fcntl(_sd, F_SETFL, O_NONBLOCK);
 }
@@ -67,7 +67,7 @@ bool SocketStream::send(std::string data) {
                 throw std::runtime_error(errmsg);
             }
         }
-        
+
         // Remove the sent characters
         data = data.substr(bytes);
     }

@@ -2,7 +2,9 @@
 """
 chatclient: A simple TCP-based chat client program.
 
-    Command-line syntax: ./chatclient <server_hostname> <server_port>
+Author:     David Rigert
+Class:      CS372 Spring 2016
+Assignment: Project #1
 
 When this program is run, the user is prompted to enter their handle.
 The handle will prepend any messages sent from this client. Once the user
@@ -11,9 +13,11 @@ program. After a connection is established, any messages sent from this program
 are displayed on the server and any other connected clients, and any messages
 sent by the server and other connected clients are displayed in this program.
 
-Author:     David Rigert
-Class:      CS372 Spring 2016
-Assignment: Project #1
+    Command-line syntax: ./chatclient <server_hostname> <server_port>
+
+This program takes the following arguments:
+    - server_hostname       -- The hostname or IP address of the server
+    - server_port           -- The port number that the server is listening on
 """
 
 __author__      = "David Rigert"
@@ -45,6 +49,7 @@ def main():
     sys.stdout.flush()
     
     # Create a socket
+    # The Socket class abstracts away the details of the socket library
     s = Socket()
 
     # Attempt to connect to server

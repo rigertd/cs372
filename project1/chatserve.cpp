@@ -68,7 +68,9 @@ int main(int argc, char* argv[]) {
         std::getline(std::cin, handle);
     }
 
-    // Instantiate a socket for listening
+    // Instantiate a Socket for listening
+    // The Socket class member functions abstract away the details
+    // of the socket library.
     Socket s = Socket();
 
     // Start listening for connections
@@ -84,20 +86,27 @@ int main(int argc, char* argv[]) {
     }
 
     // Start input thread
+    // Having a separate thread for input allows the server to continue
+    // to receive messages while waiting for clients to send messages.
     std::thread input_thread (get_input, handle + "> ");
 
     // Start client handling thread
+    // Having this in a separate thread allows the server to continue
+    // to accept new connections while handling the existing clients.
     std::thread client_thread (handle_clients, handle + "> ");
 
     // Accept incoming connections until interrupt
     while (true) {
         try {
+            // The SocketStream class abstracts away the details of sending
+            // and receiving data over a socket.
             SocketStream ss = s.accept();
             std::cout << std::endl
                 << "Accepted connection from: " << ss.get_hostname() << ":"
                 << ss.get_port() << std::endl;
 
             // Add new socket to list of currently connected clients
+            // A mutex is used to prevent race conditions.
             std::lock_guard<std::mutex> guard(clients_mutex);
             clients.push_back(ss);
         }

@@ -219,6 +219,7 @@ void handle_clients(std::string prompt) {
                 // Treat this as a received message if there are still clients
                 // connected so the prompt will be redisplayed.
                 received = !clients.empty();
+            }
         }
 
         // Redisplay prompt if message was received

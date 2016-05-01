@@ -28,6 +28,9 @@ void get_input() {
 
 void handle_clients() {
     while (true) {
+        // Sleep for 1 millisecond
+        ::usleep(1000);
+
         std::string out_message;
         std::string in_message;
         
@@ -42,17 +45,17 @@ void handle_clients() {
         while (it != clients.end()) {
             // Send the server message (if any)
             if (!out_message.empty())
-                it->send(message);
+                it->send(out_message);
             // Receive any messages from client
-            if (it->recv(message)) {
-                if (!message.empty()) {
+            if (it->recv(in_message)) {
+                if (!in_message.empty()) {
                     // Message received -- display to console
-                    std::cout << message << std::endl;
+                    std::cout << in_message << std::endl;
                     // and send to each connected client
                     auto it2 = clients.begin();
                     while (it2 != clients.end()) {
                         if (it != it2)
-                            it2->send(message);
+                            it2->send(in_message);
                         ++it2;
                     }
                 }
@@ -64,18 +67,12 @@ void handle_clients() {
                 it = clients.erase(it);
             }
         }
-        
-        // Sleep for 1 millisecond to avoid eating up too much CPU time
-        ::usleep(1000);
     }
 }
 
 int main(int argc, char* argv[]) {
 
     Socket s = Socket();
-    ::fd_set readable;
-    int fdmax;
-    std::vector<std::thread> clients;
 
     // Start listening for connections
     try {

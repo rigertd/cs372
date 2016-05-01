@@ -1,22 +1,20 @@
-from fcntl import fcntl
 import socket
 import errno
 import os
 
 class Socket:
-'''
-Custom wrapper class for the socket library.
-Implements a socket with blocking send and non-blocking receive.
-'''
-    def __init__(self):
+    """
+    Custom wrapper class for the socket library.
+    """
+
+    def __init__(self, sock=None):
         if sock is None:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            fcntl(self.sock, F_SETFL, os.O_NONBLOCK)
         else:
             self.sock = sock
     
     def connect(self, host, port):
-        self.sock.connect((host, port))
+        self.sock.connect((host, int(port)))
     
     def send(self, data):
         bytes = 0
@@ -32,20 +30,11 @@ Implements a socket with blocking send and non-blocking receive.
         return True
         
     def recv(self):
-        buffer = []
-        while True:
-            buf = ''
-            try:
-                buf = self.sock.recv(500)
-            except socket.error as ex:
-                if ex.args[0] == errno.EAGAIN or ex.args[0] == errno.EWOULDBLOCK:
-                    return True, ''.join(buffer)
-                else:
-                    raise ex
+        buf = self.sock.recv(500)
             
-            if len(buf) == 0:
-                return False, ''.join(buffer)
-            
-            buffer += buf
+        if len(buf) == 0:
+            return False, buf
+        else:
+            return True, buf
     
     

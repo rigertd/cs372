@@ -21,9 +21,10 @@ void get_input(std::string prompt) {
     while (true) {
         std::getline(std::cin, buf);
         if (!buf.empty()) {
-            outgoing.enqueue(buf);
+            outgoing.enqueue(prompt + buf);
+            if (buf != "\\quit")
+                std::cout << prompt << std::flush;
         }
-        std::cout << prompt;
     }
 }
 
@@ -94,7 +95,7 @@ void handle_clients(std::string prompt) {
         
         // Redisplay prompt if message was received
         if (received) {
-            std::cout << prompt;
+            std::cout << prompt << std::flush;
         }
     }
 }
@@ -127,18 +128,19 @@ int main(int argc, char* argv[]) {
     }
 
     // Start input thread
-    std::thread input_thread (get_input, handle + ">");
+    std::thread input_thread (get_input, handle + "> ");
     
     // Start client handling thread
-    std::thread client_thread (handle_clients, handle + ">");
+    std::thread client_thread (handle_clients, handle + "> ");
 
     // Accept incoming connections until interrupt
     while (true) {
         try {
             SocketStream ss = s.accept();
-            std::cout << "Received connection from: "
-                << s.get_dest_host() << ":" 
-                << s.get_dest_port() << std::endl;
+            std::cout << std::endl 
+                << "Received connection from: " << s.get_dest_host() << ":" 
+                << s.get_dest_port() << std::endl
+                << handle << "> " << std::flush;
 
             // Add new socket to list of currently connected clients
             std::lock_guard<std::mutex> guard(clients_mutex);

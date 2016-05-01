@@ -1,7 +1,22 @@
-#!/bin/python
+#!/usr/bin/env python
 """
-A simple TCP-based chat client program
+chatclient: A simple TCP-based chat client program.
+
+    Command-line syntax: ./chatclient <server_hostname> <server_port>
+
+When this program is run, the user is prompted to enter their handle.
+The handle will prepend any messages sent from this client. Once the user
+enters a message to send, this program attempts to connect to the chatserv
+program. After a connection is established, any messages sent from this program
+are displayed on the server and any other connected clients, and any messages
+sent by the server and other connected clients are displayed in this program.
+
+Author:     David Rigert
+Class:      CS372 Spring 2016
+Assignment: Project #1
 """
+
+__author__      = "David Rigert"
 
 import readline
 import sys
@@ -11,33 +26,35 @@ from Socket import Socket
 
 
 def main():
+    # Verify the command line arguments
+    # Display usage information if incorrect
     if len(sys.argv) != 3:
         print "usage:", sys.argv[0], "server_hostname port"
         sys.exit(1)
-    
-    # Prompt user for handle
+
+    # Prompt the user for their handle
     handle = get_handle()
-    
+
     # Display initial input prompt
     sys.stdout.write(handle + "> ")
     sys.stdout.flush()
-    
+
     # Get first line of input
     input = sys.stdin.readline().rstrip()
-    
+
     # Create a socket
     s = Socket()
-    
+
     # Attempt to connect to server
     try:
         s.connect(sys.argv[1], sys.argv[2])
     except Exception as e:
         print "connect: ", e
         sys.exit(1)
-    
+
     # List of input file descriptors for use with select function
     potential_readers = [sys.stdin, s.sock]
-    
+
     # Flag to indicate when socket is closed
     is_open = True
 
@@ -47,46 +64,57 @@ def main():
         if len(input) > 0:
             s.send(handle + "> " + input)
             input = ''
-        
-        # Check for input on stdin
+
+        # Check if stdin and socket have data available to read
         readable, writable, exceptional = \
             select.select(potential_readers, [], [], 0.01)
-        
-        # If no input on stdin, get any data available on socket
+
+        # Keep track of whether the user has typed anything
+        stdin_has_data = False
+
         for file in readable:
+            # Check stdin first
             if file is sys.stdin:
+                # Set this flag to True so data received from server
+                # doesn't stomp on user's input
+                stdin_has_data = True
                 input = file.readline().rstrip()
+
+                # Only display prompt if user isn't quitting
                 if not input == r'\quit':
                     sys.stdout.write(handle + "> ")
                     sys.stdout.flush()
-                # break so we don't receive any socket data until
-                # the client finishes typing
-                break
-            else:
+
+            # Only get data from socket if user hasn't typed anything
+            elif not stdin_has_data:
                 is_open, message = s.recv()
                 if len(message) > 0:
                     sys.stdout.write("\n" + message + "\n" + handle + "> ")
                     sys.stdout.flush()
-        
+
+        # Check if connection was closed and exit if it was
         if not is_open:
-            print "Connection closed by remote host"
+            print "\nConnection closed by remote host"
             break
 
 def get_handle():
-    '''
+    """
     Gets a handle between 1 and 10 characters from stdin.
     Reprompts the user until a valid handle is entered.
-    '''
+    """
+
     handle = ''
+
+    # Keep prompting user until they enter a valid handle
     while len(handle) == 0 or len(handle) > 10:
         sys.stdout.write("Enter a handle up to 10 characters: ")
         handle = sys.stdin.readline().rstrip()
-        
+
         if len(handle) == 0:
             print "Your handle must be at least 1 character."
         elif len(handle) > 10:
             print "Your handle cannot be longer than 10 characters."
-    
+
     return handle
 
 # This just makes sure the code doesn't run when imported as a module

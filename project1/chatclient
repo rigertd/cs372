@@ -41,7 +41,9 @@ def main():
 
     # Get first line of input
     input = sys.stdin.readline().rstrip()
-
+    sys.stdout.write(handle + "> ")
+    sys.stdout.flush()
+    
     # Create a socket
     s = Socket()
 

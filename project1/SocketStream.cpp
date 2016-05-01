@@ -10,7 +10,7 @@
 #include <exception>
 #include <stdexcept>
 
-#define BUFFER_SIZE 500
+#define BUFFER_SIZE 501
 
 SocketStream::SocketStream(int sock_desc) {
     _sd = sock_desc;

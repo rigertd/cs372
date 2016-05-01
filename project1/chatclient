@@ -12,7 +12,7 @@ from Socket import Socket
 
 def main():
     if len(sys.argv) != 3:
-        print "usage: ", sys.argv[0], "server_hostname port"
+        print "usage:", sys.argv[0], "server_hostname port"
         sys.exit(1)
     
     # Prompt user for handle
@@ -36,12 +36,16 @@ def main():
     
     # Flag to indicate when socket is closed
     is_open = True
+
+    # Display initial input prompt
+    sys.stdout.write(handle + "> ")
+    sys.stdout.flush()
     
     # Loop until input is \quit
     while input != r'\quit':
         # Send any input and clear the buffer
         if len(input) > 0:
-            s.send(input)
+            s.send(handle + "> " + input)
             input = ''
         
         # Check for input on stdin
@@ -52,17 +56,20 @@ def main():
         for file in readable:
             if file is sys.stdin:
                 input = file.readline().rstrip()
-                print handle, ">"
+                if not input == r'\quit':
+                    sys.stdout.write(handle + "> ")
+                    sys.stdout.flush()
                 # break so we don't receive any socket data until
                 # the client finishes typing
                 break
             else:
                 is_open, message = s.recv()
                 if len(message) > 0:
-                    print "\n", message, handle, ">"
+                    sys.stdout.write("\n" + message + "\n" + handle + "> ")
+                    sys.stdout.flush()
         
         if not is_open:
-            print "socket closed by remote host"
+            print "Connection closed by remote host"
             break
 
 def get_handle():

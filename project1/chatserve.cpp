@@ -138,9 +138,8 @@ int main(int argc, char* argv[]) {
         try {
             SocketStream ss = s.accept();
             std::cout << std::endl 
-                << "Received connection from: " << s.get_dest_host() << ":" 
-                << s.get_dest_port() << std::endl
-                << handle << "> " << std::flush;
+                << "Accepted connection from: " << s.get_dest_host() << ":" 
+                << s.get_dest_port() << std::endl;
 
             // Add new socket to list of currently connected clients
             std::lock_guard<std::mutex> guard(clients_mutex);

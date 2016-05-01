@@ -123,6 +123,7 @@ int main(int argc, char* argv[]) {
     }
     catch (const std::runtime_error& ex) {
         std::cout << ex.what() << std::endl;
+        exit(1);
     }
 
     // Start input thread

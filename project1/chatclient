@@ -71,15 +71,10 @@ def main():
         readable, writable, exceptional = \
             select.select(potential_readers, [], [], 0.01)
 
-        # Keep track of whether the user has typed anything
-        stdin_has_data = False
-
         for file in readable:
             # Check stdin first
             if file is sys.stdin:
-                # Set this flag to True so data received from server
-                # doesn't stomp on user's input
-                stdin_has_data = True
+                # Get the input from stdin
                 input = file.readline().rstrip()
 
                 # Only display prompt if user isn't quitting
@@ -87,8 +82,8 @@ def main():
                     sys.stdout.write(handle + "> ")
                     sys.stdout.flush()
 
-            # Only get data from socket if user hasn't typed anything
-            elif not stdin_has_data:
+            # Socket has data to read
+            else:
                 is_open, message = s.recv()
                 if len(message) > 0:
                     sys.stdout.write("\n" + message + "\n" + handle + "> ")

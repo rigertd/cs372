@@ -157,13 +157,14 @@ void handle_clients(std::string prompt) {
         // Get one outgoing server message (if any)
         if (!outgoing.empty()) {
             std::lock_guard<std::mutex> guard(outgoing_mutex);
-            out_message = outgoing.dequeue();
+            out_message = outgoing.front();
+            outgoing.pop();
 
             // If \quit is entered, disconnect all clients
             if (out_message == "\\quit") {
                 // Clear queued messages
                 while (!outgoing.empty())
-                    outgoing.dequeue();
+                    outgoing.pop();
 
                 // Disconnect all clients
                 std::lock_guard<std::mutex> guard(clients_mutex);

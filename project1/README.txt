@@ -45,13 +45,15 @@ USAGE INSTRUCTIONS:
 3. Type a message at the prompt and press Enter to establish a connection
    and send the message to the server.
 4. Continue typing and sending messages as desired.
-5. When the server or another client sends a message, it will appear in the terminal.
+5. When the server or another client sends a message, 
+   it will appear in the terminal.
 6. Type '\quit' (without the quotes) to disconnect from the server.
 
 =================================================
 Extra Credit Features
 =================================================
-1. The server accepts connections from unlimited clients (memory permitting).
+1. The server accepts connections from unlimited clients 
+   (memory permitting).
 2. All messages are sent to and received from all connected clients.
 3. The server uses separate threads for handling input and routing messages.
 4. Clients and the server can send and receive messages at any time.

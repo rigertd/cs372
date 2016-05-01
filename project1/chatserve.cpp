@@ -16,27 +16,47 @@ std::vector<SocketStream> clients;
 std::mutex clients_mutex;
 
 
-void get_input() {
+void get_input(std::string prompt) {
     std::string buf;
     while (true) {
         std::getline(std::cin, buf);
         if (!buf.empty()) {
             outgoing.enqueue(buf);
         }
+        std::cout << prompt;
     }
 }
 
-void handle_clients() {
+void handle_clients(std::string prompt) {
     while (true) {
-        // Sleep for 1 millisecond
+        // Sleep for 1 millisecond to avoid consuming too much CPU time
         ::usleep(1000);
 
+        bool received = false;
         std::string out_message;
         std::string in_message;
         
         // Get one outgoing server message (if any)
         if (!outgoing.empty()) {
             out_message = outgoing.dequeue();
+            
+            // If \quit is entered, disconnect all clients
+            if (out_message == "\\quit") {
+                // Clear queued messages
+                while (!outgoing.empty())
+                    outgoing.dequeue();
+                
+                // Disconnect all clients
+                std::lock_guard<std::mutex> guard(clients_mutex);
+                auto it = clients.begin();
+                while (it != clients.end()) {
+                    it->close();
+                    it = clients.erase(it);
+                }
+                
+                // Skip rest of loop
+                continue;
+            }
         }
         
         // Handle sending and receiving of messages from clients
@@ -49,9 +69,13 @@ void handle_clients() {
             // Receive any messages from client
             if (it->recv(in_message)) {
                 if (!in_message.empty()) {
-                    // Message received -- display to console
-                    std::cout << in_message << std::endl;
-                    // and send to each connected client
+                    // Message received -- set flag
+                    received = true;
+                    
+                    // Display message on next line
+                    std::cout << std::endl << in_message << std::endl;
+                    
+                    // Send to each connected client
                     auto it2 = clients.begin();
                     while (it2 != clients.end()) {
                         if (it != it2)
@@ -67,27 +91,45 @@ void handle_clients() {
                 it = clients.erase(it);
             }
         }
+        
+        // Redisplay prompt if message was received
+        if (received) {
+            std::cout << prompt;
+        }
     }
 }
 
 int main(int argc, char* argv[]) {
+    // Verify command line arguments
+    if (argc != 2) {
+        std::cout << "usage: " << argv[0] << " listen_port" << std::endl;
+        exit(1);
+    }
 
+    // Prompt the user for their handle
+    std::string handle;
+    while (handle.empty() || handle.size() > 10) {
+        std::cout << "Enter a handle up to 10 characters: ";
+        std::getline(std::cin, handle);
+    }
+    
     Socket s = Socket();
 
     // Start listening for connections
     try {
-        s.listen("51423");
-        std::cout << "Waiting for connections..." << std::endl;
+        s.listen(argv[1]);
+        std::cout << "Waiting for connections on port " 
+            << argv[1] << "..." << std::endl;
     }
     catch (const std::runtime_error& ex) {
         std::cout << ex.what() << std::endl;
     }
 
     // Start input thread
-    std::thread input_thread (get_input);
+    std::thread input_thread (get_input, handle + ">");
     
     // Start client handling thread
-    std::thread client_thread (handle_clients);
+    std::thread client_thread (handle_clients, handle + ">");
 
     // Accept incoming connections until interrupt
     while (true) {

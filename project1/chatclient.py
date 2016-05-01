@@ -12,8 +12,11 @@ from Socket import Socket
 
 def main():
     if len(sys.argv) != 3:
-        print "invalid syntax: ", sys.argv[0], "server-hostname port#"
+        print "usage: ", sys.argv[0], "server_hostname port"
         sys.exit(1)
+    
+    # Prompt user for handle
+    handle = get_handle()
     
     # Create a socket
     s = Socket()
@@ -43,23 +46,41 @@ def main():
         
         # Check for input on stdin
         readable, writable, exceptional = \
-				select.select(potential_readers, [], [], 0.01)
+            select.select(potential_readers, [], [], 0.01)
         
         # If no input on stdin, get any data available on socket
         for file in readable:
             if file is sys.stdin:
                 input = file.readline().rstrip()
+                print handle, ">"
                 # break so we don't receive any socket data until
                 # the client finishes typing
                 break
             else:
                 is_open, message = s.recv()
                 if len(message) > 0:
-                    print message
+                    print "\n", message, handle, ">"
         
         if not is_open:
             print "socket closed by remote host"
             break
+
+def get_handle():
+    '''
+    Gets a handle between 1 and 10 characters from stdin.
+    Reprompts the user until a valid handle is entered.
+    '''
+    handle = ''
+    while len(handle) == 0 or len(handle) > 10:
+        sys.stdout.write("Enter a handle up to 10 characters: ")
+        handle = sys.stdin.readline().rstrip()
+        
+        if len(handle) == 0:
+            print "Your handle must be at least 1 character."
+        elif len(handle) > 10:
+            print "Your handle cannot be longer than 10 characters."
+    
+    return handle
 
 # This just makes sure the code doesn't run when imported as a module
 if __name__ == '__main__':

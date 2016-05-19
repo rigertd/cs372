@@ -521,7 +521,7 @@ void handle_client(Socket s) {
     std::string cmd;
     std::getline(instream, cmd);
     std::vector<std::string> files;
-    
+    std::cout << "Received command '" << cmd << "'" << std::endl;
     if (cmd == LIST_COMMAND) {
         // Get a list of files in the current directory
         try {
@@ -553,7 +553,7 @@ void handle_client(Socket s) {
         // Invalid command; send error message over s
         s.send(std::string("INVALID COMMAND"));
     }
-    
+    s.close();
 }
 
 /**

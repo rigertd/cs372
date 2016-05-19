@@ -149,7 +149,7 @@ void handle_client(Socket s) {
         // Socket closed; client disconnected
         std::lock_guard<std::mutex> guard(output_mutex);
         msg << s.get_host_ip() << " disconnected" << std::endl;
-        output.emplace(msg.c_str())
+        output.emplace(msg.str().c_str());
         return;
     }
     
@@ -158,11 +158,12 @@ void handle_client(Socket s) {
     std::istringstream instream (input);
     std::string cmd;
     std::getline(instream, cmd);
+    std::vector<std::string> files
     
     if (cmd == LIST_COMMAND) {
         // Get a list of files in the current directory
         try {
-            std::vector<std::string> files = get_files_in_dir(".");
+            files = get_files_in_dir(".");
         }
         catch (const std::runtime_error& ex) {
             std::cout << ex.what() << std::endl;
@@ -179,7 +180,7 @@ void handle_client(Socket s) {
             // Socket closed; client disconnected
             std::lock_guard<std::mutex> guard(output_mutex);
             msg << s.get_host_ip() << " disconnected" << std::endl;
-            output.emplace(msg.c_str());
+            output.emplace(msg.str().c_str());
             return;
         }
         // Send the contents of the CWD to the client over s
@@ -290,7 +291,7 @@ void listen(const char* port) {
         }
 
         // Bind failed. Close file descriptor and try next address
-        close(_sd);
+        ::close(_sd);
     }
 
     // Throw an exception if bind failed on all returned addresses
@@ -453,7 +454,7 @@ bool send(std::string data) {
  */
 bool recv(std::string& buffer, ssize_t len) {
     ssize_t bytes;
-    unsigned char buf[BUFFER_SIZE];
+    char buf[BUFFER_SIZE];
     buffer.clear();
     
     // Keep trying until 'len' bytes are received
@@ -493,7 +494,7 @@ bool recv(std::string& buffer, ssize_t len) {
  */
 bool recv(std::string& buffer) {
     ssize_t bytes;
-    unsigned char buf[BUFFER_SIZE];
+    char buf[BUFFER_SIZE];
     buffer.clear();
     
     // Keep trying until something is received
@@ -518,7 +519,7 @@ bool recv(std::string& buffer) {
         // Append null terminator
         buf[bytes] = '\0';
         // Add to string buffer
-        buffer += buf;
+        buffer.append(buf);
         // One data block received, return to caller
         return true;
     }

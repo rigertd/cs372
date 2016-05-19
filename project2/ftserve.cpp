@@ -18,6 +18,7 @@
 *               - port      -- The TCP port on which to wait for client
 *                              connections.
 \*********************************************************/
+#include <algorithm>
 #include <iostream>
 #include <mutex>
 #include <queue>
@@ -35,6 +36,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <dirent.h>
 
 // Queue length for listen sockets
 #define SOCKET_CONNECTION_QUEUE 10
@@ -45,12 +47,15 @@
 #define LIST_COMMAND "LIST"
 // String for -g command
 #define GET_COMMAND "GET"
+// String for acknowledgement
+#define ACK_COMMAND "ACK"
 
 /*========================================================*
  * Forward declarations
  *========================================================*/
 void handle_client(SocketStream);
 void display_output();
+std::vector<std::string> get_files_in_dir(const char*);
 
 class Socket;
 
@@ -154,11 +159,35 @@ void handle_client(Socket s) {
     std::getline(instream, cmd);
     
     if (cmd == LIST_COMMAND) {
+        // Get a list of files in the current directory
+        try {
+            std::vector<std::string> files = get_files_in_dir(".");
+        }
+        catch (const std::runtime_error& ex) {
+            std::cout << ex.what() << std::endl;
+        }
+        
+        // Join the filenames into a single string for sending
+        std::stringstream fss;
+        std::for_each(files.begin(), files.end(), [&fss] (const std::string& str) 
+            { fss << str << std::endl; });
+        // Send the size of the data to be sent
+        s.send(std::to_string(fss.str().length()));
+        // Wait for acknowledgement
+        if (!s.recv(input)) {
+            // Socket closed; client disconnected
+            std::lock_guard<std::mutex> guard(output_mutex);
+            msg << s.get_host_ip() << " disconnected" << std::endl;
+            output.emplace(msg.c_str())
+            return;
+        }
         // Send the contents of the CWD to the client over s
+        s.send(fss.str());
     } else if (cmd == GET_COMMAND) {
         // Attempt to send the specified file to the client over new socket
     } else {
         // Invalid command; send error message over s
+        s.send(std::string("INVALID COMMAND"));
     }
     
 }
@@ -548,3 +577,34 @@ void get_remote_addr(struct sockaddr*) {
 }
 
 }; // End of Socket class
+
+std::vector<std::string> get_files_in_dir(const char* name) {
+    std::vector<std::string> files;
+    struct dirent* entry = nullptr;
+    
+    // Attempt to open the specified directory
+    DIR *d = opendir(name);
+    if (d == nullptr) {
+        // Throw exception if opening directory fails
+        std::string errmsg("recv: ");
+        errmsg += ::strerror(errno);
+        throw std::runtime_error(errmsg);
+    }
+    
+    // Set errno to 0 to detect any readdir errors
+    errno = 0;
+    // Attempt to read all entries and add them to file list
+    for (entry = readdir(d); entry != nullptr; entry = readdir(d)) {
+        files.push_back(std::string(entry->d_name));
+    }
+    
+    if (errno != 0) {
+        // Some error occurred. Throw an exception
+        std::string errmsg("recv: ");
+        errmsg += ::strerror(errno);
+        throw std::runtime_error(errmsg);
+    }
+    
+    // Everything worked if execution reaches here
+    return files;
+}

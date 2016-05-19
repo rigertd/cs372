@@ -600,7 +600,7 @@ std::vector<std::string> get_files_in_dir(const char* name) {
     // Attempt to read all entries and add them to file list
     for (entry = readdir(d); entry != nullptr; entry = readdir(d)) {
         // Skip the current and previous directory entries
-        if (::strcmp(entry->d_name, "..") != 0 || ::strcmp(entry->d_name, ".") != 0)
+        if (::strcmp(entry->d_name, "..") != 0 && ::strcmp(entry->d_name, ".") != 0)
             files.push_back(std::string(entry->d_name));
     }
     
@@ -618,9 +618,9 @@ std::vector<std::string> get_files_in_dir(const char* name) {
 std::string get_line(std::string& source) {
     size_t eol = source.find_first_of("\r\n");
     if (eol == std::string::npos) {
-        return input;
+        return source;
     }
     else {
-        return input.substr(0, eol);
+        return source.substr(0, eol);
     }
 }

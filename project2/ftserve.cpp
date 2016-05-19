@@ -421,6 +421,7 @@ private:
 void handle_client(Socket);
 void display_output();
 std::vector<std::string> get_files_in_dir(const char*);
+std::string get_line(std::string&);
 
 /*========================================================*
  * Global variables
@@ -517,14 +518,7 @@ void handle_client(Socket s) {
     
     // Command received
     // Extract first line (if more than one) without any line ending
-    std::string cmd;
-    size_t eol = input.find_first_of("\r\n");
-    if (eol == std::string::npos) {
-        cmd = input;
-    }
-    else {
-        cmd = input.substr(0, eol);
-    }
+    std::string cmd = get_line(input);
     std::vector<std::string> files;
     std::cout << "Received command '" << cmd << "'" << std::endl;
     // Verify command
@@ -551,8 +545,11 @@ void handle_client(Socket s) {
             output.emplace(msg.str().c_str());
             return;
         }
-        // Send the contents of the CWD to the client over s
-        s.send(fss.str());
+        cmd = get_line(input);
+        if (cmd == ACK_COMMAND) {
+            // Send the contents of the CWD to the client over s
+            s.send(fss.str());
+        }
     } else if (cmd == GET_COMMAND) {
         // Attempt to send the specified file to the client over new socket
     } else {
@@ -602,7 +599,9 @@ std::vector<std::string> get_files_in_dir(const char* name) {
     errno = 0;
     // Attempt to read all entries and add them to file list
     for (entry = readdir(d); entry != nullptr; entry = readdir(d)) {
-        files.push_back(std::string(entry->d_name));
+        // Skip the current and previous directory entries
+        if (::strcmp(entry->d_name, "..") != 0 || ::strcmp(entry->d_name, ".") != 0)
+            files.push_back(std::string(entry->d_name));
     }
     
     if (errno != 0) {
@@ -614,4 +613,14 @@ std::vector<std::string> get_files_in_dir(const char* name) {
     
     // Everything worked if execution reaches here
     return files;
+}
+
+std::string get_line(std::string& source) {
+    size_t eol = source.find_first_of("\r\n");
+    if (eol == std::string::npos) {
+        return input;
+    }
+    else {
+        return input.substr(0, eol);
+    }
 }

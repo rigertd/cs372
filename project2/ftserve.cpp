@@ -76,7 +76,6 @@ public:
     * Closes the socket and frees any memory allocated for address info.
     */
     ~Socket() {
-        ::close(_sd);
         if (_info != nullptr) ::freeaddrinfo(_info);
     }
 
@@ -470,7 +469,7 @@ int main(int argc, char* argv[]) {
             // The SocketStream class abstracts away the details of sending
             // and receiving data over a socket.
             Socket s_client = s.accept();
-            std::cout << "Connection from " << s_client.get_hostname() << "." 
+            std::cout << "Connection from " << s_client.get_host_ip() << "." 
                 << std::endl;
 
             // Spawn a new thread to handle the connected client.

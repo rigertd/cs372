@@ -207,7 +207,7 @@ void display_output() {
         // Lock the output queue mutex for thread safety
         std::lock_guard<std::mutex> guard(output_mutex);
         // Display all queued output messages
-        while (!output_mutex.empty()) {
+        while (!output.empty()) {
             std::cout << output.front() << std::endl;
             output.pop();
         }
@@ -556,7 +556,7 @@ std::string _port;      // Port number of connected client
  *
  *  sa      The sockaddr struct to parse for the information.
  */
-void get_remote_addr(struct sockaddr*) {
+void get_remote_addr(struct sockaddr* sa) {
     char s[INET6_ADDRSTRLEN]; // temp storage buffer for IP address
     void* in_addr = nullptr;
 
@@ -575,7 +575,6 @@ void get_remote_addr(struct sockaddr*) {
 
     ::inet_ntop(sa->sa_family, in_addr, s, sizeof(s));
     _host_ip.assign(s);
-    
 }
 
 }; // End of Socket class

@@ -515,13 +515,19 @@ void handle_client(Socket s) {
         return;
     }
     
-    // Command received; verify command
-    // Put input in stringstream for easy parsing
-    std::istringstream instream (input);
+    // Command received
+    // Extract first line (if more than one) without any line ending
     std::string cmd;
-    std::getline(instream, cmd);
+    size_t eol = input.find_first_of("\r\n");
+    if (eol == std::string::npos) {
+        cmd = input;
+    }
+    else {
+        cmd = input.substr(0, eol);
+    }
     std::vector<std::string> files;
     std::cout << "Received command '" << cmd << "'" << std::endl;
+    // Verify command
     if (cmd == LIST_COMMAND) {
         // Get a list of files in the current directory
         try {

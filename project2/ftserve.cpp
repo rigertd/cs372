@@ -19,6 +19,7 @@
 *                              connections.
 \*********************************************************/
 #include <algorithm>
+#include <atomic>
 #include <iostream>
 #include <mutex>
 #include <queue>
@@ -53,7 +54,7 @@
 /*========================================================*
  * Forward declarations
  *========================================================*/
-void handle_client(SocketStream);
+void handle_client(Socket);
 void display_output();
 std::vector<std::string> get_files_in_dir(const char*);
 
@@ -178,7 +179,7 @@ void handle_client(Socket s) {
             // Socket closed; client disconnected
             std::lock_guard<std::mutex> guard(output_mutex);
             msg << s.get_host_ip() << " disconnected" << std::endl;
-            output.emplace(msg.c_str())
+            output.emplace(msg.c_str());
             return;
         }
         // Send the contents of the CWD to the client over s
@@ -476,7 +477,7 @@ bool recv(std::string& buffer, ssize_t len) {
         // Append null terminator
         buf[bytes] = '\0';
         // Concatenate to end of string buffer
-        buffer += buf;
+        buffer.append(buf);
     }
 }
 

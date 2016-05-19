@@ -54,11 +54,11 @@
 /*========================================================*
  * Forward declarations
  *========================================================*/
+class Socket;
+
 void handle_client(Socket);
 void display_output();
 std::vector<std::string> get_files_in_dir(const char*);
-
-class Socket;
 
 /*========================================================*
  * Global variables
@@ -158,7 +158,7 @@ void handle_client(Socket s) {
     std::istringstream instream (input);
     std::string cmd;
     std::getline(instream, cmd);
-    std::vector<std::string> files
+    std::vector<std::string> files;
     
     if (cmd == LIST_COMMAND) {
         // Get a list of files in the current directory

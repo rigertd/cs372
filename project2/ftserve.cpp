@@ -20,6 +20,7 @@
 \*********************************************************/
 #include <algorithm>
 #include <atomic>
+#include <fstream>
 #include <iostream>
 #include <mutex>
 #include <queue>
@@ -36,6 +37,7 @@
 #include <netdb.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <dirent.h>
 
@@ -53,7 +55,7 @@
 
 
 /*========================================================*
- * Class declarations
+ * Class declaration
  *========================================================*/
 class Socket {
 public:
@@ -79,299 +81,14 @@ public:
         if (_info != nullptr) ::freeaddrinfo(_info);
     }
 
-    /**
-    * Configures the socket to listen for connections on the specified port.
-    *
-    * This function throws a runtime_error exception if any of the steps fail.
-    *
-    *  port   The port to listen for connections on.
-    */
-    void listen(const char* port) {
-        struct addrinfo hints;
-        struct addrinfo *current = nullptr;
-        int yes = 1;
-        int retval;
-        std::string errmsg;
-
-        // Zero-initialize and set addrinfo structure
-        std::memset(&hints, 0, sizeof(hints));
-        hints.ai_family = AF_UNSPEC;    // IPv4 or IPv6, whichever is available
-        hints.ai_socktype = SOCK_STREAM; // Non-blocking TCP
-        hints.ai_flags = AI_PASSIVE;    // Use localhost IP
-
-        // Look up the localhost address info
-        retval = ::getaddrinfo(NULL, port, &hints, &_info);
-        if (retval != 0) {
-            errmsg = "getaddrinfo: ";
-            errmsg += ::gai_strerror(retval);
-            throw std::runtime_error(errmsg);
-        }
-
-        // Loop through address structure results until bind succeeds
-        for (current = _info; current != NULL; current = current->ai_next) {
-            // Attempt to open a socket based on the localhost's address info
-            _sd = ::socket(current->ai_family, current->ai_socktype, current->ai_protocol);
-            if (_sd == -1) {
-                continue; // Try next on error
-            }
-
-            // Attempt to reuse the socket if it's already in use
-            if (::setsockopt(_sd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1) {
-                errmsg = "setsockopt: ";
-                errmsg += ::strerror(errno);
-                throw std::runtime_error(errmsg);
-            }
-
-            // Attempt to bind the socket to the port
-            if (::bind(_sd, current->ai_addr, current->ai_addrlen) == 0) {
-                break;  // Break from loop if bind was successful
-            }
-
-            // Bind failed. Close file descriptor and try next address
-            ::close(_sd);
-        }
-
-        // Throw an exception if bind failed on all returned addresses
-        if (current == NULL) {
-            errmsg = "bind: No valid address found";
-            throw std::runtime_error(errmsg);
-        }
-
-        // Free memory used by localhost's address info
-        ::freeaddrinfo(_info);
-        _info = nullptr;
-
-        // Listen on port for up to _queue_len connections
-        if (::listen(_sd, _queue_len) < 0) {
-            errmsg = "listen: ";
-            errmsg += ::strerror(errno);
-            throw std::runtime_error(errmsg);
-        }
-        
-    }
-
-    /**
-     * Accepts an incoming connection.
-     *
-     * This function throws a runtime_error exception if any of the steps fail.
-     *
-     * Returns a Socket for the new connection.
-     */
-    Socket accept() {
-        int new_sd;
-        struct sockaddr_storage remote_addr;
-        socklen_t sin_size = sizeof(remote_addr);
-
-        new_sd = ::accept(_sd, reinterpret_cast<struct sockaddr*>(&remote_addr), &sin_size);
-        if (new_sd < 0) {
-            std::string errmsg("accept: ");
-            errmsg += ::strerror(errno);
-            throw std::runtime_error(errmsg);
-        }
-
-        // Create a new Socket based on the returned descriptor
-        Socket s_client (new_sd);
-        
-        // Get the remote IP and port information
-        s_client.get_remote_addr(reinterpret_cast<struct sockaddr*>(&remote_addr));
-
-        return s_client;
-    }
-
-    /**
-     * Connects to the specified host on the specified port.
-     *
-     * This function throws a runtime_error exception if any of the steps fail.
-     *
-     *  host    The hostname to establish a connection with.
-     *  port    The port number to connect to.
-     */
-    void connect(const char* host, const char* port) {
-        struct addrinfo hints;
-        struct addrinfo *current = nullptr;
-        int retval;
-        std::string errmsg;
-
-        // Zero-initialize and set addrinfo structure
-        std::memset(&hints, 0, sizeof(hints));
-        hints.ai_family = AF_UNSPEC;    // IPv4 or IPv6, whichever is available
-        hints.ai_socktype = SOCK_STREAM; // Non-blocking TCP
-
-        // Look up the remote host address info
-        retval = ::getaddrinfo(host, port, &hints, &_info);
-        if (retval != 0) {
-            errmsg = "getaddrinfo: ";
-            errmsg += ::gai_strerror(retval);
-            throw std::runtime_error(errmsg);
-        }
-
-        // Loop through address structure results until connect succeeds
-        for (current = _info; current != NULL; current = current->ai_next) {
-            // Attempt to open a socket based on the remote host's address info
-            _sd = ::socket(current->ai_family, current->ai_socktype, current->ai_protocol);
-            if (_sd == -1) {
-                continue; // Try next on error
-            }
-            
-            if (::connect(_sd, current->ai_addr, current->ai_addrlen) == -1) {
-                ::close(_sd);
-                continue;
-            }
-            
-            // connect succeeded
-            break;
-        }
-        
-        // Throw an exception if connect failed on all returned addresses
-        if (current == NULL) {
-            errmsg = "connect: No valid address found";
-            throw std::runtime_error(errmsg);
-        }
-
-        // Get the remote IP and port information
-        get_remote_addr(reinterpret_cast<struct sockaddr*>(current->ai_addr));
-        // Store the original hostname
-        _hostname.assign(host);
-
-        // Free memory used by remote host's address info
-        ::freeaddrinfo(_info);
-        _info = nullptr;
-    }
-
-    /**
-     * Sends the specified data to the connected host.
-     *
-     * This function continues to send until all data has been sent
-     * or the socket is closed.
-     *
-     *  data    The data to send over the socket.
-     *
-     * Returns whether the socket is still open.
-     */
-    bool send(std::string data) {
-        ssize_t bytes;
-
-        // Send until there is nothing left to send
-        while (!data.empty()) {
-            bytes = ::send(_sd, data.c_str(), data.size(), 0);
-            if (bytes == 0) {
-                // Socket was closed, return false
-                return false;
-            } else if (bytes == -1) {
-                if (errno == EINTR) {
-                    // Keep sending if interrupted by signal
-                    continue;
-                }
-                else {
-                    // Some non-interrupt error occurred. Throw exception.
-                    std::string errmsg("send: ");
-                    errmsg += ::strerror(errno);
-                    throw std::runtime_error(errmsg);
-                }
-            }
-
-            // Remove the sent characters
-            data = data.substr(bytes);
-        }
-
-        // Return true if socket is still open
-        return true;
-    }
-
-    /**
-     * Receives the specified amount of data from the connected host.
-     *
-     * This function blocks until the specified amount of data is received,
-     * or the socket is closed.
-     *
-     *  buffer  A string buffer to store the received data.
-     *  len     The length of the data to receive.
-     *
-     * Returns whether the socket is still open.
-     */
-    bool recv(std::string& buffer, ssize_t len) {
-        ssize_t bytes;
-        char buf[BUFFER_SIZE];
-        buffer.clear();
-        
-        // Keep trying until 'len' bytes are received
-        while (buffer.size() < len) {
-            bytes = ::recv(_sd, buf, BUFFER_SIZE - 1, 0);
-            
-            if (bytes == 0) {
-                // socket was closed, return false
-                return false;
-            } else if (bytes == -1) {
-                if (errno == EINTR) {
-                    // Try again if interrupted by signal
-                    continue;
-                } else {
-                    // Otherwise, throw exception
-                    std::string errmsg("recv: ");
-                    errmsg += ::strerror(errno);
-                    throw std::runtime_error(errmsg);
-                }
-            }
-            // Append null terminator
-            buf[bytes] = '\0';
-            // Concatenate to end of string buffer
-            buffer.append(buf);
-        }
-    }
-
-    /**
-     * Receives BUFFER_SIZE - 1 worth of data from the connected host.
-     *
-     * This function blocks until some data is received,
-     * or the socket is closed.
-     *
-     *  buffer  A string buffer to store the received data.
-     *
-     * Returns whether the socket is still open.
-     */
-    bool recv(std::string& buffer) {
-        ssize_t bytes;
-        char buf[BUFFER_SIZE];
-        buffer.clear();
-        
-        // Keep trying until something is received
-        while (true) {
-            bytes = ::recv(_sd, buf, BUFFER_SIZE - 1, 0);
-
-            if (bytes == 0) {
-                // socket was closed, return false
-                return false;
-            } else if (bytes == -1) {
-                if (errno == EINTR) {
-                    // Try again if interrupted by signal
-                    continue;
-                } else {
-                    // Otherwise, throw exception
-                    std::string errmsg("recv: ");
-                    errmsg += ::strerror(errno);
-                    throw std::runtime_error(errmsg);
-                }
-            }
-            
-            // Append null terminator
-            buf[bytes] = '\0';
-            // Add to string buffer
-            buffer.append(buf);
-            // One data block received, return to caller
-            return true;
-        }
-    }
-
-    /**
-     * Closes the socket.
-     *
-     * This function immediately closes the underlying socket descriptor.
-     * After this function is called, the object can no longer be used for 
-     * sending or receiving until another connection is established.
-     */
-    void close() {
-        ::close(_sd);
-    }
+    // Function prototypes--see implementations at bottom for descriptions
+    void listen(const char* port);
+    Socket accept();
+    void connect(const char* host, const char* port);
+    bool send(std::string data);
+    bool recv(std::string& buffer, ssize_t len);
+    bool recv(std::string& buffer);
+    void close();
 
     std::string get_hostname() { return _hostname; }
     std::string get_host_ip() { return _host_ip; }
@@ -386,33 +103,7 @@ private:
     std::string _host_ip;   // IP of connected client
     std::string _port;      // Port number of connected client
 
-    /**
-     * Gets the remote host IP address and port.
-     *
-     * This function extracts the information for both IPv4 and IPv6 connections.
-     *
-     *  sa      The sockaddr struct to parse for the information.
-     */
-    void get_remote_addr(struct sockaddr* sa) {
-        char s[INET6_ADDRSTRLEN]; // temp storage buffer for IP address
-        void* in_addr = nullptr;
-
-        // IPv4 connection
-        if (sa->sa_family == AF_INET) {
-            struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(sa);
-            in_addr = reinterpret_cast<void*>(&addr->sin_addr);
-            _port.assign(std::to_string(ntohs(addr->sin_port)));
-        }
-        // IPv6 connection
-        else {
-            struct sockaddr_in6* addr = reinterpret_cast<struct sockaddr_in6*>(sa);
-            in_addr = reinterpret_cast<void*>(&addr->sin6_addr);
-            _port.assign(std::to_string(ntohs(addr->sin6_port)));
-        }
-
-        ::inet_ntop(sa->sa_family, in_addr, s, sizeof(s));
-        _host_ip.assign(s);
-    }
+    void get_remote_addr(struct sockaddr* sa);
 }; // End of Socket class
 
 /*========================================================*
@@ -532,11 +223,11 @@ void handle_client(Socket s) {
         }
         
         // Join the filenames into a single string for sending
-        std::stringstream fss;
-        std::for_each(files.begin(), files.end(), [&fss] (const std::string& str) 
-            { fss << str << std::endl; });
+        std::stringstream ss;
+        std::for_each(files.begin(), files.end(), [&ss] (const std::string& str) 
+            { ss << str << std::endl; });
         // Send the size of the data to be sent
-        s.send(std::to_string(fss.str().length()));
+        s.send(std::to_string(ss.str().length()));
         // Wait for acknowledgement
         if (!s.recv(input)) {
             // Socket closed; client disconnected
@@ -548,9 +239,57 @@ void handle_client(Socket s) {
         cmd = get_line(input);
         if (cmd == ACK_COMMAND) {
             // Send the contents of the CWD to the client over s
-            s.send(fss.str());
+            s.send(ss.str());
         }
     } else if (cmd == GET_COMMAND) {
+        // Get the file name from the next line
+        std::string filename = get_line(input);
+        // Verify that file exists
+        struct stat sb;
+        if (stat(filename.c_str(), &sb) == -1) {
+            // Lock mutex before adding message to output queue
+            std::lock_guard<std::mutex> guard(output_mutex);
+            switch (errno) {
+            case EACCES:
+                // Access denied. Send an appropriate error message
+                msg << "Access denied. Sending error message to "
+                    << s.get_host_ip() << std::endl;
+                output.emplace(msg.str().c_str());
+                s.send(std::string("ACCESS DENIED"));
+                break;
+            case ENOENT:
+                // File not found. Send an appropriate error message
+                msg << "File not found. Sending error message to "
+                    << s.get_host_ip() << std::endl;
+                output.emplace(msg.str().c_str());
+                s.send(std::string("FILE NOT FOUND"));
+                break;
+            default:
+                // Other error. Send a generic error message
+                msg << "Some other error occurred. Sending error message to "
+                    << s.get_host_ip() << std::endl;
+                output.emplace(msg.str().c_str());
+                s.send(std::string("ERROR OCCURRED"));
+                break;
+            }
+        }
+        // Open the file
+        std::istream file(filename.c_str(), std::ios::binary);
+        // Only send the file if it can be read
+        if (file.good()) {
+            // Read and send the file.
+            msg << "Sending " << filename << " to " << s.get_host_ip()
+                << std::endl;
+            output.emplace(msg.str().c_str());
+        }
+        else {
+            // Some error occurred. Send a generic error message
+            msg << "File read error. Sending error message to "
+                << s.get_host_ip() << std::endl;
+            output.emplace(msg.str().c_str());
+            s.send(std::string("FILE READ ERROR"));
+        }
+        
         // Attempt to send the specified file to the client over new socket
     } else {
         // Invalid command; send error message over s
@@ -615,12 +354,346 @@ std::vector<std::string> get_files_in_dir(const char* name) {
     return files;
 }
 
+/**
+ * Gets a line of text from the specified string, removes it
+ * from the string and returns it as a separate string.
+ *
+ *  source  The string to get a line of text from.
+ */
 std::string get_line(std::string& source) {
     size_t eol = source.find_first_of("\r\n");
+    std::string temp;
     if (eol == std::string::npos) {
-        return source;
+        temp = source;
+        source.clear();
+        return temp;
     }
     else {
-        return source.substr(0, eol);
+        temp = source.substr(0, eol);
+        eol = source.find_first_not_of("\r\n\t ");
+        source = source.substr(eol);
+        return temp;
     }
+}
+
+/**
+ * Configures the socket to listen for connections on the specified port.
+ *
+ * This function throws a runtime_error exception if any of the steps fail.
+ *
+ *  port   The port to listen for connections on.
+ */
+void Socket::listen(const char* port) {
+    struct addrinfo hints;
+    struct addrinfo *current = nullptr;
+    int yes = 1;
+    int retval;
+    std::string errmsg;
+
+    // Zero-initialize and set addrinfo structure
+    std::memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;    // IPv4 or IPv6, whichever is available
+    hints.ai_socktype = SOCK_STREAM; // Non-blocking TCP
+    hints.ai_flags = AI_PASSIVE;    // Use localhost IP
+
+    // Look up the localhost address info
+    retval = ::getaddrinfo(NULL, port, &hints, &_info);
+    if (retval != 0) {
+        errmsg = "getaddrinfo: ";
+        errmsg += ::gai_strerror(retval);
+        throw std::runtime_error(errmsg);
+    }
+
+    // Loop through address structure results until bind succeeds
+    for (current = _info; current != NULL; current = current->ai_next) {
+        // Attempt to open a socket based on the localhost's address info
+        _sd = ::socket(current->ai_family, current->ai_socktype, current->ai_protocol);
+        if (_sd == -1) {
+            continue; // Try next on error
+        }
+
+        // Attempt to reuse the socket if it's already in use
+        if (::setsockopt(_sd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1) {
+            errmsg = "setsockopt: ";
+            errmsg += ::strerror(errno);
+            throw std::runtime_error(errmsg);
+        }
+
+        // Attempt to bind the socket to the port
+        if (::bind(_sd, current->ai_addr, current->ai_addrlen) == 0) {
+            break;  // Break from loop if bind was successful
+        }
+
+        // Bind failed. Close file descriptor and try next address
+        ::close(_sd);
+    }
+
+    // Throw an exception if bind failed on all returned addresses
+    if (current == NULL) {
+        errmsg = "bind: No valid address found";
+        throw std::runtime_error(errmsg);
+    }
+
+    // Free memory used by localhost's address info
+    ::freeaddrinfo(_info);
+    _info = nullptr;
+
+    // Listen on port for up to _queue_len connections
+    if (::listen(_sd, _queue_len) < 0) {
+        errmsg = "listen: ";
+        errmsg += ::strerror(errno);
+        throw std::runtime_error(errmsg);
+    }
+    
+}
+
+/**
+ * Accepts an incoming connection.
+ *
+ * This function throws a runtime_error exception if any of the steps fail.
+ *
+ * Returns a Socket for the new connection.
+ */
+Socket Socket::accept() {
+    int new_sd;
+    struct sockaddr_storage remote_addr;
+    socklen_t sin_size = sizeof(remote_addr);
+
+    new_sd = ::accept(_sd, reinterpret_cast<struct sockaddr*>(&remote_addr), &sin_size);
+    if (new_sd < 0) {
+        std::string errmsg("accept: ");
+        errmsg += ::strerror(errno);
+        throw std::runtime_error(errmsg);
+    }
+
+    // Create a new Socket based on the returned descriptor
+    Socket s_client (new_sd);
+    
+    // Get the remote IP and port information
+    s_client.get_remote_addr(reinterpret_cast<struct sockaddr*>(&remote_addr));
+
+    return s_client;
+}
+
+/**
+ * Connects to the specified host on the specified port.
+ *
+ * This function throws a runtime_error exception if any of the steps fail.
+ *
+ *  host    The hostname to establish a connection with.
+ *  port    The port number to connect to.
+ */
+void Socket::connect(const char* host, const char* port) {
+    struct addrinfo hints;
+    struct addrinfo *current = nullptr;
+    int retval;
+    std::string errmsg;
+
+    // Zero-initialize and set addrinfo structure
+    std::memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;    // IPv4 or IPv6, whichever is available
+    hints.ai_socktype = SOCK_STREAM; // Non-blocking TCP
+
+    // Look up the remote host address info
+    retval = ::getaddrinfo(host, port, &hints, &_info);
+    if (retval != 0) {
+        errmsg = "getaddrinfo: ";
+        errmsg += ::gai_strerror(retval);
+        throw std::runtime_error(errmsg);
+    }
+
+    // Loop through address structure results until connect succeeds
+    for (current = _info; current != NULL; current = current->ai_next) {
+        // Attempt to open a socket based on the remote host's address info
+        _sd = ::socket(current->ai_family, current->ai_socktype, current->ai_protocol);
+        if (_sd == -1) {
+            continue; // Try next on error
+        }
+        
+        if (::connect(_sd, current->ai_addr, current->ai_addrlen) == -1) {
+            ::close(_sd);
+            continue;
+        }
+        
+        // connect succeeded
+        break;
+    }
+    
+    // Throw an exception if connect failed on all returned addresses
+    if (current == NULL) {
+        errmsg = "connect: No valid address found";
+        throw std::runtime_error(errmsg);
+    }
+
+    // Get the remote IP and port information
+    get_remote_addr(reinterpret_cast<struct sockaddr*>(current->ai_addr));
+    // Store the original hostname
+    _hostname.assign(host);
+
+    // Free memory used by remote host's address info
+    ::freeaddrinfo(_info);
+    _info = nullptr;
+}
+
+/**
+ * Sends the specified data to the connected host.
+ *
+ * This function continues to send until all data has been sent
+ * or the socket is closed.
+ *
+ *  data    The data to send over the socket.
+ *
+ * Returns whether the socket is still open.
+ */
+bool Socket::send(std::string data) {
+    ssize_t bytes;
+
+    // Send until there is nothing left to send
+    while (!data.empty()) {
+        bytes = ::send(_sd, data.c_str(), data.size(), 0);
+        if (bytes == 0) {
+            // Socket was closed, return false
+            return false;
+        } else if (bytes == -1) {
+            if (errno == EINTR) {
+                // Keep sending if interrupted by signal
+                continue;
+            }
+            else {
+                // Some non-interrupt error occurred. Throw exception.
+                std::string errmsg("send: ");
+                errmsg += ::strerror(errno);
+                throw std::runtime_error(errmsg);
+            }
+        }
+
+        // Remove the sent characters
+        data = data.substr(bytes);
+    }
+
+    // Return true if socket is still open
+    return true;
+}
+
+/**
+ * Receives the specified amount of data from the connected host.
+ *
+ * This function blocks until the specified amount of data is received,
+ * or the socket is closed.
+ *
+ *  buffer  A string buffer to store the received data.
+ *  len     The length of the data to receive.
+ *
+ * Returns whether the socket is still open.
+ */
+bool Socket::recv(std::string& buffer, ssize_t len) {
+    ssize_t bytes;
+    char buf[BUFFER_SIZE];
+    buffer.clear();
+    
+    // Keep trying until 'len' bytes are received
+    while (buffer.size() < len) {
+        bytes = ::recv(_sd, buf, BUFFER_SIZE - 1, 0);
+        
+        if (bytes == 0) {
+            // socket was closed, return false
+            return false;
+        } else if (bytes == -1) {
+            if (errno == EINTR) {
+                // Try again if interrupted by signal
+                continue;
+            } else {
+                // Otherwise, throw exception
+                std::string errmsg("recv: ");
+                errmsg += ::strerror(errno);
+                throw std::runtime_error(errmsg);
+            }
+        }
+        // Append null terminator
+        buf[bytes] = '\0';
+        // Concatenate to end of string buffer
+        buffer.append(buf);
+    }
+}
+
+/**
+ * Receives BUFFER_SIZE - 1 worth of data from the connected host.
+ *
+ * This function blocks until some data is received,
+ * or the socket is closed.
+ *
+ *  buffer  A string buffer to store the received data.
+ *
+ * Returns whether the socket is still open.
+ */
+bool Socket::recv(std::string& buffer) {
+    ssize_t bytes;
+    char buf[BUFFER_SIZE];
+    buffer.clear();
+    
+    // Keep trying until something is received
+    while (true) {
+        bytes = ::recv(_sd, buf, BUFFER_SIZE - 1, 0);
+
+        if (bytes == 0) {
+            // socket was closed, return false
+            return false;
+        } else if (bytes == -1) {
+            if (errno == EINTR) {
+                // Try again if interrupted by signal
+                continue;
+            } else {
+                // Otherwise, throw exception
+                std::string errmsg("recv: ");
+                errmsg += ::strerror(errno);
+                throw std::runtime_error(errmsg);
+            }
+        }
+        
+        // Append null terminator
+        buf[bytes] = '\0';
+        // Add to string buffer
+        buffer.append(buf);
+        // One data block received, return to caller
+        return true;
+    }
+}
+
+/**
+ * Closes the socket.
+ *
+ * This function immediately closes the underlying socket descriptor.
+ * After this function is called, the object can no longer be used for 
+ * sending or receiving until another connection is established.
+ */
+void Socket::close() {
+    ::close(_sd);
+}
+
+/**
+ * Gets the remote host IP address and port.
+ *
+ * This function extracts the information for both IPv4 and IPv6 connections.
+ *
+ *  sa      The sockaddr struct to parse for the information.
+ */
+void Socket::get_remote_addr(struct sockaddr* sa) {
+    char s[INET6_ADDRSTRLEN]; // temp storage buffer for IP address
+    void* in_addr = nullptr;
+
+    // IPv4 connection
+    if (sa->sa_family == AF_INET) {
+        struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(sa);
+        in_addr = reinterpret_cast<void*>(&addr->sin_addr);
+        _port.assign(std::to_string(ntohs(addr->sin_port)));
+    }
+    // IPv6 connection
+    else {
+        struct sockaddr_in6* addr = reinterpret_cast<struct sockaddr_in6*>(sa);
+        in_addr = reinterpret_cast<void*>(&addr->sin6_addr);
+        _port.assign(std::to_string(ntohs(addr->sin6_port)));
+    }
+
+    ::inet_ntop(sa->sa_family, in_addr, s, sizeof(s));
+    _host_ip.assign(s);
 }

@@ -247,7 +247,6 @@ void handle_client(Socket s) {
         }
     } else if (cmd == GET_COMMAND) {
         // Get the file name from the next line
-        inbuf.str(input);
         std::string filename = get_line(inbuf);
         std::cout << "Checking for file " << filename << std::endl;
         // Verify that file exists

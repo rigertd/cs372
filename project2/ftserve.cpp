@@ -115,7 +115,7 @@ void display_output();
 std::vector<std::string> get_files_in_dir(const char*);
 std::string get_line(std::istringstream&);
 size_t get_file_size(std::ifstream&);
-void print_message(std::string&) const;
+void print_message(const std::string&);
 
 /*========================================================*
  * Global variables
@@ -334,7 +334,7 @@ void handle_client(Socket s) {
  *
  *  msg     The message to print.
  */
-void print_message(std::string msg) const {
+void print_message(const std::string msg) {
     std::lock_guard<std::mutex> guard(output_mutex);
     output.emplace(msg.c_str());
 }

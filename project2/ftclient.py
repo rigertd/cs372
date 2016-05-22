@@ -46,8 +46,8 @@ def main():
         print "connect: ", e
         sys.exit(1)
 
-    # Send command to server along with data port and filename (if any)
-    control_sock.send('{0} {1} {2}'.format(args.command, args.data_port, args.filename))
+    # Send command to server along with data port and file/dirname (if any)
+    control_sock.send('{0} {1} {2}'.format(args.command, args.data_port, args.filename or args.dirname))
 
     # Flag to indicate when socket is closed
     is_open = True

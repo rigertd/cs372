@@ -329,6 +329,8 @@ void handle_client(Socket s) {
 void display_output() {
     // Keep running until server shuts down
     while (!is_shutting_down.load()) {
+        // Sleep for 10 ms to avoid consuming too much CPU time
+        ::usleep(10000);
         // Lock the output queue mutex for thread safety
         std::lock_guard<std::mutex> guard(output_mutex);
         // Display all queued output messages
@@ -337,8 +339,6 @@ void display_output() {
             output.pop();
         }
         
-        // Sleep for 10 ms to avoid consuming too much CPU time
-        ::usleep(10000);
     }
 }
 

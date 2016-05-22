@@ -293,7 +293,7 @@ void handle_client(Socket s) {
                 << s.get_host_ip() << std::endl;
             output.emplace(msg.str().c_str());
             s.send(std::string("CANNOT SEND DIRECTORY"));
-            s.close()
+            s.close();
             return;
         }
         
@@ -416,7 +416,7 @@ size_t get_file_size(std::ifstream& fs) {
     size_t length = -1;
     if (fs) {
         fs.seekg(0, fs.end);
-        length = data.tellg();
+        length = fs.tellg();
         fs.seekg(0, fs.beg);
     }
     return length;

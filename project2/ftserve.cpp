@@ -53,7 +53,8 @@
 #define GET_COMMAND "GET"
 // String for acknowledgement
 #define ACK_COMMAND "ACK"
-
+// String for -c command
+#define CD_COMMAND "CD"
 
 /*========================================================*
  * Class declaration
@@ -121,6 +122,7 @@ private:
 enum Command {
     Command_LIST = 0,
     Command_GET = (1 << 1),
+    Command_CD = (1 << 2)
 };
 
 /*========================================================*
@@ -149,7 +151,8 @@ std::atomic<bool> is_shutting_down(false);
 // A map to convert text commands into a Command enum value
 std::map<std::string, Command> command_map {
     {LIST_COMMAND, Command_LIST},
-    {GET_COMMAND, Command_GET}
+    {GET_COMMAND, Command_GET},
+    {CD_COMMAND, Command_CD}
 };
 
 /*========================================================*
@@ -271,6 +274,55 @@ void handle_client(Socket s, int server_port) {
                 { oss << str << std::endl; });
             sendbuf = new std::istringstream(oss.str());
             msg << "Sending directory contents to " << s.get_hostname()
+                << ":" << data_port << std::endl;
+            print_message(msg);
+        }
+        else if (cmd_it_second == Command_CD) {
+            // Get the directory name from the rest of the line
+            std::string dirname = get_line(inbuf);
+            msg << "Change directory to \"" << dirname << "\"requested."
+                << std::endl;
+            print_message(msg);
+            if (::chdir(dirname.c_str()) == -1) {
+                switch (errno) {
+                case EACCES:
+                    // Access denied. Send an appropriate error message
+                    msg << "Access denied. Sending error message to "
+                        << s.get_hostname() << ":" << server_port << std::endl;
+                    print_message(msg);
+                    s.send(std::string("ACCESS DENIED"));
+                    break;
+                case ENOENT:
+                    // Directory not found. Send an appropriate error message
+                    msg << "Directory not found. Sending error message to "
+                        << s.get_hostname() << ":" << server_port << std::endl;
+                    print_message(msg);
+                    s.send(std::string("DIRECTORY NOT FOUND"));
+                    break;
+                case ENOTDIR:
+                    // Not a directory. Send an appropriate error message
+                    msg << "Not a directory. Sending error message to "
+                        << s.get_hostname() << ":" << server_port << std::endl;
+                    print_message(msg);
+                    s.send(std::string("NOT A DIRECTORY"));
+                    break;
+                default:
+                    // Other error. Send a generic error message
+                    msg << "Some other error occurred. Sending error message to "
+                        << s.get_hostname() << ":" << server_port << std::endl;
+                    print_message(msg);
+                    s.send(std::string("ERROR OCCURRED"));
+                    break;
+                }
+                s.close();
+                return;
+            }
+            
+            // Directory successfully changed
+            char* cwd = ::get_current_dir_name();
+            sendbuf = new std::istringstream(cwd);
+            free(cwd);
+            msg << "Sending current working directory to " << s.get_hostname()
                 << ":" << data_port << std::endl;
             print_message(msg);
         }

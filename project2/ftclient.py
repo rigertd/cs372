@@ -6,17 +6,19 @@ Author:     David Rigert
 Class:      CS372 Spring 2016
 Assignment: Project #2
 
-This program connects to ftserve and either requests a directory listing
-or the transfer of a file. All files are transferred as binary data.
+This program connects to ftserve and either requests a directory listing,
+a change of working directory, or the transfer of a file.
+All files are transferred as binary data.
 
-    Command-line syntax:
-        ./ftclient.py server_host server_port (-l | -g FILENAME) data_port
+Command-line syntax:
+    ftclient.py server_host server_port (-l | -g FILENAME | -c DIRNAME) data_port
 
 This program takes the following arguments:
     - server_host   -- Hostname or IP address of the server running ftserve
     - server_port   -- Port number that the server is listening on
     - -l, --list    -- Tells the server to send a list of files
     - -g, --get     -- Tells the server to send the specified FILENAME
+    - -c, --cd      -- Tells the server to change the working directory
     - data_port     -- Port number over which server sends data to client
 """
 
@@ -76,8 +78,10 @@ def main():
         # Display required output in terminal window
         if args.command == 'LIST':
             print('Receiving directory structure from {0}:{1}'.format(args.server_host, args.data_port))
-        else:
+        elif args.command == 'GET':
             print('Receiving "{0}" from {1}:{2}'.format(args.filename, args.server_host, args.data_port))
+        else:
+            print('Receiving new working directory from {0}:{1}'.format(args.server_host, args.data_port))
         # Receive the amount of data specified in the response
         is_open, data = data_sock.recv_all(int(response))
 
@@ -97,6 +101,8 @@ def main():
             f.write(data)
             f.close()
             print('File transfer complete.')
+        elif args.command == 'CD':
+            print(data);
 
     else:
         # Error message--print it and exit
@@ -142,6 +148,7 @@ def parse_args():
     command_group = parser.add_mutually_exclusive_group(required=True)
     command_group.add_argument('-l', '--list', action='store_const', dest='command', const='LIST', help='List files in the server directory.')
     command_group.add_argument('-g', '--get', action='store', dest='filename', help='Get the specified file from ftserve.', metavar='FILENAME')
+    command_group.add_argument('-c', '--cd', action='store', dest='dirname', help='Change directories on ftserve.', metavar='DIRNAME')
     parser.add_argument('data_port', help='The client port to use for incoming data transfers.')
     args = parser.parse_args()
 
@@ -149,6 +156,10 @@ def parse_args():
     # it means the user specified the -g option
     if args.command is None and args.filename is not None:
         args.command = 'GET'
+    # If a dirname was specified but no command,
+    # it means the user specified the -c option
+    elif args.command is None and args.dirname is not None:
+        args.command = 'CD'
     return args
 
 def is_int(val):

@@ -334,7 +334,7 @@ void handle_client(Socket s) {
  *
  *  msg     The message to print.
  */
-void print_message(const std::string msg) {
+void print_message(const std::string& msg) {
     std::lock_guard<std::mutex> guard(output_mutex);
     output.emplace(msg.c_str());
 }

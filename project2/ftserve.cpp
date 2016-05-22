@@ -271,6 +271,7 @@ void handle_client(Socket s, int server_port) {
             std::string filename = get_line(inbuf);
             msg << "File \"" << filename << "\" requested on port " << data_port
                 << "." << std::endl;
+            print_message(msg.str());
             msg.str("");
             
             // Verify that file exists

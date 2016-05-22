@@ -120,4 +120,21 @@ class Socket:
         else:
             return True, buf
 
-
+    def recv(self, length):
+        """
+        Receives the specified number of bytes of data.
+        Returns a tuple including whether the socket is still open,
+        and the received data (or an empty string if none).
+        """
+        received = 0
+        buf = []
+        while received < length:
+            data = self.sock.recv(500)
+            # Return False and anything that was received if the socket was closed
+            if len(data) == 0:
+                return False, ''.join(buf)
+            # Otherwise append to data already received
+            received += len(data)
+            buf.append(data)
+            
+        return True, ''.join(buf)

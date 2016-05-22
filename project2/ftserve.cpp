@@ -45,7 +45,7 @@
 // Queue length for listen sockets
 #define SOCKET_CONNECTION_QUEUE 10
 // Receive buffer size
-#define BUFFER_SIZE 501
+#define BUFFER_SIZE 500
 
 // String for -l command
 #define LIST_COMMAND "LIST"
@@ -701,6 +701,7 @@ bool Socket::send(std::istream* data) {
     size_t sent = 0;
 
     // Allocate a buffer for reading data from the stream before sending
+    // Send data in 500 byte chunks
     char buf[BUFFER_SIZE];
 
     // Get length of the file
@@ -752,14 +753,14 @@ bool Socket::send(std::istream* data) {
  */
 bool Socket::recv(std::istringstream& buffer, ssize_t len) {
     ssize_t bytes;
-    char buf[BUFFER_SIZE];
+    char buf[BUFFER_SIZE + 1];
     std::ostringstream received;
     buffer.str("");
     buffer.clear();
 
     // Keep trying until 'len' bytes are received
     while (buffer.gcount() < len) {
-        bytes = ::recv(_sd, buf, BUFFER_SIZE - 1, 0);
+        bytes = ::recv(_sd, buf, BUFFER_SIZE, 0);
 
         if (bytes == 0) {
             // socket was closed, return false
@@ -788,7 +789,7 @@ bool Socket::recv(std::istringstream& buffer, ssize_t len) {
 }
 
 /**
- * Receives BUFFER_SIZE - 1 worth of data from the connected host.
+ * Receives BUFFER_SIZE worth of data from the connected host.
  *
  * This function blocks until some data is received,
  * or the socket is closed.
@@ -799,13 +800,13 @@ bool Socket::recv(std::istringstream& buffer, ssize_t len) {
  */
 bool Socket::recv(std::istringstream& buffer) {
     ssize_t bytes;
-    char buf[BUFFER_SIZE];
+    char buf[BUFFER_SIZE + 1];
     buffer.str("");
     buffer.clear();
 
     // Keep trying until something is received
     while (true) {
-        bytes = ::recv(_sd, buf, BUFFER_SIZE - 1, 0);
+        bytes = ::recv(_sd, buf, BUFFER_SIZE, 0);
 
         if (bytes == 0) {
             // socket was closed, return false

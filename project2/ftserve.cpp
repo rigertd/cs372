@@ -22,6 +22,7 @@
 #include <atomic>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <mutex>
 #include <queue>
 #include <cstring>
@@ -91,9 +92,9 @@ public:
     bool recv(std::istringstream& buffer);
     void close();
 
-    std::string get_hostname() { return _hostname; }
-    std::string get_host_ip() { return _host_ip; }
-    std::string get_port() { return _port; }
+    std::string get_hostname() const { return _hostname; }
+    std::string get_host_ip() const { return _host_ip; }
+    std::string get_port() const { return _port; }
 
 private:
 
@@ -107,6 +108,11 @@ private:
     void get_remote_addr(struct sockaddr* sa);
 }; // End of Socket class
 
+enum Command {
+    Command_LIST = 0,
+    Command_GET = (1 << 1),
+};
+
 /*========================================================*
  * Forward declarations
  *========================================================*/
@@ -116,6 +122,7 @@ std::vector<std::string> get_files_in_dir(const char*);
 std::string get_line(std::istringstream&);
 size_t get_file_size(std::ifstream&);
 void print_message(const std::string&);
+void free_buffer(std::istream*&, Command) {
 
 /*========================================================*
  * Global variables
@@ -127,6 +134,12 @@ std::mutex output_mutex;
 
 // An atomic to signal that the server is shutting down
 std::atomic<bool> is_shutting_down(false);
+
+// A map to convert text commands into a Command enum value
+std::map<std::string, Command> command_map {
+    {LIST_COMMAND, Command_LIST},
+    {GET_COMMAND, Command_GET}
+}
 
 /*========================================================*
  * main function
@@ -200,7 +213,7 @@ int main(int argc, char* argv[]) {
 void handle_client(Socket s) {
     std::istringstream inbuf;
     std::ostringstream msg;
-    std::string cmd;
+    std::string cmd_string;
     
     // Get command from client
     if (!s.recv(inbuf)) {
@@ -212,107 +225,132 @@ void handle_client(Socket s) {
     
     // Command received
     // Extract first token to get command
-    inbuf >> cmd;
+    inbuf >> cmd_string;
     // Verify command
-    if (cmd == LIST_COMMAND) {
-        // Create vector to store list of files
-        std::vector<std::string> files;
-        
-        // Get a list of files in the current directory
-        try {
-            files = get_files_in_dir(".");
-        }
-        catch (const std::runtime_error& ex) {
-            msg << ex.what() << std::endl;
+    auto cmd_it = command_map.find(cmd_string);
+    if (cmd_it == command_map.end()) {
+        // Invalid command; send error message over s
+        s.send(std::string("INVALID COMMAND"));
+    }
+    else {
+        std::istream* sendbuf = nullptr;
+        // Get the data port from the rest of the first line
+        int data_port = std::stoi(get_line(inbuf));
+        // Run the specified command
+        switch (*cmd_it) {
+        case Command_LIST:
+            msg << "List directory requested on port " << s.get_port() 
+                << "." << std::endl;
             print_message(msg.str());
+            // Create vector to store list of files
+            std::vector<std::string> files;
+            // Get a list of files in the current directory
+            try {
+                files = get_files_in_dir(".");
+            }
+            catch (const std::runtime_error& ex) {
+                msg << ex.what() << std::endl;
+                print_message(msg.str());
+            }
+            
+            // Join the filenames into a single string for sending
+            std::ostringstream oss;
+            std::for_each(files.begin(), files.end(), [&oss] (const std::string& str) 
+                { oss << str << std::endl; });
+            sendbuf = new std::istringstream(oss.str());
+            msg << "Sending directory contents to " << s.get_host_ip()
+                << ":" << data_port << std::endl;
+            print_message(msg.str());
+            break;
+        case Command_GET:
+            // Get the file name from the next line
+            std::string filename = get_line(inbuf);
+            msg << "File \"" << filename << "\" requested on port " << s.get_port()
+                << "." << std::endl;
+            
+            // Verify that file exists
+            struct stat sb;
+            if (stat(filename.c_str(), &sb) == -1) {
+                switch (errno) {
+                case EACCES:
+                    // Access denied. Send an appropriate error message
+                    msg << "Access denied. Sending error message to "
+                        << s.get_host_ip() << ":" << s.get_port << std::endl;
+                    print_message(msg.str());
+                    s.send(std::string("ACCESS DENIED"));
+                    break;
+                case ENOENT:
+                    // File not found. Send an appropriate error message
+                    msg << "File not found. Sending error message to "
+                        << s.get_host_ip() << ":" << s.get_port << std::endl;
+                    print_message(msg.str());
+                    s.send(std::string("FILE NOT FOUND"));
+                    break;
+                default:
+                    // Other error. Send a generic error message
+                    msg << "Some other error occurred. Sending error message to "
+                        << s.get_host_ip() << ":" << s.get_port << std::endl;
+                    print_message(msg.str());
+                    s.send(std::string("ERROR OCCURRED"));
+                    break;
+                }
+                s.close();
+                return;
+            }
+            
+            // Send an error message if the client requested a directory
+            if (S_ISDIR(sb.st_mode)) {
+                msg << "Specified file is a directory. Sending error message to "
+                    << s.get_host_ip() << ":" << s.get_port << std::endl;
+                print_message(msg.str());
+                s.send(std::string("CANNOT SEND DIRECTORY"));
+                s.close();
+                return;
+            }
+            
+            // Open the file
+            sendbuf = new std::ifstream(filename.c_str(), std::ios::binary);
+            // Only send the file if it can be read
+            if (!static_cast<std::ifstream*>(sendbuf)->good()) {
+                // Some error occurred. Send a generic error message
+                msg << "File read error. Sending error message to "
+                    << s.get_host_ip() << ":" << s.get_port << std::endl;
+                print_message(msg.str());
+                s.send(std::string("FILE READ ERROR"));
+                s.close();
+                free_buffer(sendbuf, cmd);
+                return;
+            }
+            msg << "Sending \"" << filename << "\" to " << s.get_host_ip()
+                << ":" << data_port << std::endl;
+            print_message(msg.str());
+            break;
         }
         
-        // Join the filenames into a single string for sending
-        std::stringstream ss;
-        std::for_each(files.begin(), files.end(), [&ss] (const std::string& str) 
-            { ss << str << std::endl; });
-        // Send the size of the data to be sent
-        s.send(std::to_string(ss.str().length()));
+        // Send the size of the data to send
+        s.send(std::to_string(get_size(sendbuf)));
+        
         // Wait for acknowledgement
         if (!s.recv(inbuf)) {
             // Socket closed; client disconnected
             msg << s.get_host_ip() << " disconnected" << std::endl;
             print_message(msg.str());
+            free_buffer(sendbuf, *cmd_it);
             return;
         }
-        cmd = get_line(inbuf);
-        if (cmd == ACK_COMMAND) {
-            // Send the contents of the CWD to the client over s
-            s.send(ss.str());
-        }
-    } else if (cmd == GET_COMMAND) {
-        // Get the data port from the rest of the first line
-        std::string port_str = get_line(inbuf);
-        int data_port = std::stoi(port_str);
-        // Get the file name from the next line
-        std::string filename = get_line(inbuf);
-        // Verify that file exists
-        struct stat sb;
-        if (stat(filename.c_str(), &sb) == -1) {
-            switch (errno) {
-            case EACCES:
-                // Access denied. Send an appropriate error message
-                msg << "Access denied. Sending error message to "
-                    << s.get_host_ip() << std::endl;
-                print_message(msg.str());
-                s.send(std::string("ACCESS DENIED"));
-                break;
-            case ENOENT:
-                // File not found. Send an appropriate error message
-                msg << "File not found. Sending error message to "
-                    << s.get_host_ip() << std::endl;
-                print_message(msg.str());
-                s.send(std::string("FILE NOT FOUND"));
-                break;
-            default:
-                // Other error. Send a generic error message
-                msg << "Some other error occurred. Sending error message to "
-                    << s.get_host_ip() << std::endl;
-                print_message(msg.str());
-                s.send(std::string("ERROR OCCURRED"));
-                break;
-            }
-            s.close();
-            return;
-        }
-        
-        // Send an error message if the client requested a directory
-        if (S_ISDIR(sb.st_mode)) {
-            msg << "Client requested a directory. Sending error message to "
-                << s.get_host_ip() << std::endl;
+        cmd_string = get_line(inbuf);
+        if (cmd_string != ACK_COMMAND) {
+            // Invalid acknowledgement response. Send error message
+            msg << "Invalid response. Sending error message to "
+                << s.get_host_ip() << ":" << s.get_port << std::endl;
             print_message(msg.str());
-            s.send(std::string("CANNOT SEND DIRECTORY"));
+            s.send(std::string("INVALID RESPONSE"));
             s.close();
+            free_buffer(sendbuf, *cmd_it);
             return;
         }
-        
-        // Open the file
-        std::ifstream file(filename.c_str(), std::ios::binary);
-        // Only send the file if it can be read
-        if (file.good()) {
-            msg << "Sending " << filename << " to " << s.get_host_ip()
-                << std::endl;
-            print_message(msg.str());
-            // Send the file size over the control connection
-            s.send(std::to_string(get_file_size(file)));
-        }
-        else {
-            // Some error occurred. Send a generic error message
-            msg << "File read error. Sending error message to "
-                << s.get_host_ip() << std::endl;
-            print_message(msg.str());
-            s.send(std::string("FILE READ ERROR"));
-            s.close();
-            return;
-        }
-        
         // Establish connection to client data port
-        std::cout << "Attempting to connect to port " << data_port << std::endl;
+        msg << "std::cout << "Attempting to connect to port " << data_port << std::endl;
         // Attempt to send the specified file to the client over new socket
         // if (!s.send(file)) {
             // // The socket was closed before the file finished sending
@@ -321,12 +359,26 @@ void handle_client(Socket s) {
                 // << std::endl;
             // output.emplace(msg.str().c_str());
         // }
-    } else {
-        // Invalid command; send error message over s
-        s.send(std::string("INVALID COMMAND"));
+        free_buffer(sendbuf, );
     }
     s.close();
 }
+
+void free_buffer(std::istream*& buf, Command cmd) {
+    if (buf != nullptr) {
+        switch (cmd) {
+        case Command_LIST:
+            free(static_cast<std::istringstream>(buf));
+            buf = nullptr;
+            break;
+        case Command_GET:
+            free(static_cast<std::ifstream>(buf));
+            buf = nullptr;
+            break;
+        }
+    }
+}
+
 
 /**
  * Prints a message to the terminal window on the server in a thread-safe
@@ -409,18 +461,18 @@ std::string get_line(std::istringstream& source) {
 }
 
 /**
- * Gets the number of bytes available in an ifstream.
+ * Gets the number of bytes available in an istream.
  *
- *  fs  The ifstream to get the size of.
+ *  is  Pointer to the istream to get the size of.
  *
- * Returns the number of bytes in the specified ifstream.
+ * Returns the number of bytes in the specified istream.
  */
-size_t get_file_size(std::ifstream& fs) {
+size_t get_size(std::istream* is) {
     size_t length = -1;
-    if (fs) {
-        fs.seekg(0, fs.end);
-        length = fs.tellg();
-        fs.seekg(0, fs.beg);
+    if (is) {
+        is->seekg(0, is->end);
+        length = is->tellg();
+        is->seekg(0, is->beg);
     }
     return length;
 }

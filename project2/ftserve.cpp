@@ -121,7 +121,7 @@ void display_output();
 std::vector<std::string> get_files_in_dir(const char*);
 std::string get_line(std::istringstream&);
 size_t get_file_size(std::ifstream&);
-void print_message(const std::string&);
+void print_message(std::ostringstream&);
 void free_buffer(std::istream*&, Command);
 size_t get_size(std::istream*);
 
@@ -221,18 +221,19 @@ void handle_client(Socket s, int server_port) {
     if (!s.recv(inbuf)) {
         // Socket closed; client disconnected
         msg << s.get_host_ip() << " disconnected" << std::endl;
-        print_message(msg.str());
+        print_message(msg);
         return;
     }
     
     // Command received
+    std::cout << "Message received: \"" << inbuf.str() << "\"" << std::endl;
     // Extract first token to get command
     inbuf >> cmd_string;
     // Verify command
     auto cmd_it = command_map.find(cmd_string);
     if (cmd_it == command_map.end()) {
         // Invalid command; send error message over s
-        s.send(std::string("INVALID COMMAND"));
+        s.send(std::string("INVALID COMMAND\n"));
     }
     else {
         std::istream* sendbuf = nullptr;
@@ -242,8 +243,7 @@ void handle_client(Socket s, int server_port) {
         if (cmd_it->second == Command_LIST) {
             msg << "List directory requested on port " << data_port 
                 << "." << std::endl;
-            print_message(msg.str());
-            msg.str("");
+            print_message(msg);
             // Create vector to store list of files
             std::vector<std::string> files;
             // Get a list of files in the current directory
@@ -252,7 +252,7 @@ void handle_client(Socket s, int server_port) {
             }
             catch (const std::runtime_error& ex) {
                 msg << ex.what() << std::endl;
-                print_message(msg.str());
+                print_message(msg);
                 return;
             }
             
@@ -263,16 +263,14 @@ void handle_client(Socket s, int server_port) {
             sendbuf = new std::istringstream(oss.str());
             msg << "Sending directory contents to " << s.get_host_ip()
                 << ":" << data_port << std::endl;
-            print_message(msg.str());
-            msg.str("");
+            print_message(msg);
         }
         else if (cmd_it->second == Command_GET) {
             // Get the file name from the next line
             std::string filename = get_line(inbuf);
             msg << "File \"" << filename << "\" requested on port " << data_port
                 << "." << std::endl;
-            print_message(msg.str());
-            msg.str("");
+            print_message(msg);
             
             // Verify that file exists
             struct stat sb;
@@ -282,22 +280,22 @@ void handle_client(Socket s, int server_port) {
                     // Access denied. Send an appropriate error message
                     msg << "Access denied. Sending error message to "
                         << s.get_host_ip() << ":" << server_port << std::endl;
-                    print_message(msg.str());
-                    s.send(std::string("ACCESS DENIED"));
+                    print_message(msg);
+                    s.send(std::string("ACCESS DENIED\n"));
                     break;
                 case ENOENT:
                     // File not found. Send an appropriate error message
                     msg << "File not found. Sending error message to "
                         << s.get_host_ip() << ":" << server_port << std::endl;
-                    print_message(msg.str());
-                    s.send(std::string("FILE NOT FOUND"));
+                    print_message(msg);
+                    s.send(std::string("FILE NOT FOUND\n"));
                     break;
                 default:
                     // Other error. Send a generic error message
                     msg << "Some other error occurred. Sending error message to "
                         << s.get_host_ip() << ":" << server_port << std::endl;
-                    print_message(msg.str());
-                    s.send(std::string("ERROR OCCURRED"));
+                    print_message(msg);
+                    s.send(std::string("ERROR OCCURRED\n"));
                     break;
                 }
                 s.close();
@@ -308,8 +306,8 @@ void handle_client(Socket s, int server_port) {
             if (S_ISDIR(sb.st_mode)) {
                 msg << "Specified file is a directory. Sending error message to "
                     << s.get_host_ip() << ":" << server_port << std::endl;
-                print_message(msg.str());
-                s.send(std::string("CANNOT SEND DIRECTORY"));
+                print_message(msg);
+                s.send(std::string("CANNOT SEND DIRECTORY\n"));
                 s.close();
                 return;
             }
@@ -321,16 +319,15 @@ void handle_client(Socket s, int server_port) {
                 // Some error occurred. Send a generic error message
                 msg << "File read error. Sending error message to "
                     << s.get_host_ip() << ":" << server_port << std::endl;
-                print_message(msg.str());
-                s.send(std::string("FILE READ ERROR"));
+                print_message(msg);
+                s.send(std::string("FILE READ ERROR\n"));
                 s.close();
                 free_buffer(sendbuf, cmd_it->second);
                 return;
             }
             msg << "Sending \"" << filename << "\" to " << s.get_host_ip()
                 << ":" << data_port << std::endl;
-            print_message(msg.str());
-            msg.str("");
+            print_message(msg);
         }
         
         // Send the size of the data to send
@@ -340,7 +337,7 @@ void handle_client(Socket s, int server_port) {
         if (!s.recv(inbuf)) {
             // Socket closed; client disconnected
             msg << s.get_host_ip() << " disconnected" << std::endl;
-            print_message(msg.str());
+            print_message(msg);
             free_buffer(sendbuf, cmd_it->second);
             return;
         }
@@ -349,16 +346,15 @@ void handle_client(Socket s, int server_port) {
             // Invalid acknowledgement response. Send error message
             msg << "Invalid response. Sending error message to "
                 << s.get_host_ip() << ":" << server_port << std::endl;
-            print_message(msg.str());
-            s.send(std::string("INVALID RESPONSE"));
+            print_message(msg);
+            s.send(std::string("INVALID RESPONSE\n"));
             s.close();
             free_buffer(sendbuf, cmd_it->second);
             return;
         }
         // Establish connection to client data port
         msg << "Attempting to connect to port " << data_port << std::endl;
-        print_message(msg.str());
-        msg.str("");
+        print_message(msg);
         // Attempt to send the specified file to the client over new socket
         // if (!s.send(file)) {
             // // The socket was closed before the file finished sending
@@ -392,11 +388,12 @@ void free_buffer(std::istream*& buf, Command cmd) {
  * Prints a message to the terminal window on the server in a thread-safe
  * manner.
  *
- *  msg     The message to print.
+ *  msg     The ostringstream containing the message to print.
  */
-void print_message(const std::string& msg) {
+void print_message(const std::ostringstream& msg) {
     std::lock_guard<std::mutex> guard(output_mutex);
-    output.emplace(msg.c_str());
+    output.emplace(msg.str().c_str());
+    msg.str("");
 }
 
 /**

@@ -685,7 +685,7 @@ bool Socket::send(std::string data) {
  *
  * Returns whether the socket is still open.
  */
-bool Socket::send(std::ifstream& data) {
+bool Socket::send(std::istream* data) {
     ssize_t bytes = 0;
     size_t length = 0;
     size_t sent = 0;
@@ -694,13 +694,13 @@ bool Socket::send(std::ifstream& data) {
     char buf[BUFFER_SIZE];
     
     // Get length of the file
-    length = get_file_size(data);
+    length = get_size(data);
 
     // Send until there is nothing left to send
     while (sent < length) {
         memset(buf, 0, BUFFER_SIZE);
         // Load the file data into the buffer
-        data.read(buf, BUFFER_SIZE);
+        data->read(buf, BUFFER_SIZE);
         // Calculate the amount to send in this iteration
         size_t to_send = length - sent < BUFFER_SIZE ? length - sent : BUFFER_SIZE;
         // Send the data over the socket

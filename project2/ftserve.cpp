@@ -926,7 +926,7 @@ void Socket::get_remote_addr(struct sockaddr* sa) {
     
     // Get hostname
     socklen_t remote_addr_len = sizeof(struct sockaddr_storage);
-    int result = ::getnameinfo(sa, remote_addr_len, h, NI_MAXHOST, NULL, NULL, NULL);
+    int result = ::getnameinfo(sa, remote_addr_len, h, NI_MAXHOST, NULL, 0, 0);
     if (result == 0) {
         _hostname.assign(h);
     }

@@ -243,6 +243,7 @@ void handle_client(Socket s, int server_port) {
             msg << "List directory requested on port " << data_port 
                 << "." << std::endl;
             print_message(msg.str());
+            msg.str("");
             // Create vector to store list of files
             std::vector<std::string> files;
             // Get a list of files in the current directory
@@ -252,6 +253,7 @@ void handle_client(Socket s, int server_port) {
             catch (const std::runtime_error& ex) {
                 msg << ex.what() << std::endl;
                 print_message(msg.str());
+                return;
             }
             
             // Join the filenames into a single string for sending
@@ -262,12 +264,14 @@ void handle_client(Socket s, int server_port) {
             msg << "Sending directory contents to " << s.get_host_ip()
                 << ":" << data_port << std::endl;
             print_message(msg.str());
+            msg.str("");
         }
         else if (cmd_it->second == Command_GET) {
             // Get the file name from the next line
             std::string filename = get_line(inbuf);
             msg << "File \"" << filename << "\" requested on port " << data_port
                 << "." << std::endl;
+            msg.str("");
             
             // Verify that file exists
             struct stat sb;
@@ -325,6 +329,7 @@ void handle_client(Socket s, int server_port) {
             msg << "Sending \"" << filename << "\" to " << s.get_host_ip()
                 << ":" << data_port << std::endl;
             print_message(msg.str());
+            msg.str("");
         }
         
         // Send the size of the data to send
@@ -351,6 +356,8 @@ void handle_client(Socket s, int server_port) {
         }
         // Establish connection to client data port
         msg << "Attempting to connect to port " << data_port << std::endl;
+        print_message(msg.str());
+        msg.str("");
         // Attempt to send the specified file to the client over new socket
         // if (!s.send(file)) {
             // // The socket was closed before the file finished sending

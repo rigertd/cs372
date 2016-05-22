@@ -549,7 +549,7 @@ std::vector<std::string> get_files_in_dir(const char* name) {
     // Attempt to read all entries and add them to file list
     for (entry = readdir(d); entry != nullptr; entry = readdir(d)) {
         // Check what kind of entry it is
-        if (::stat(entry->d_name, &sb) == -1) {
+        if (::lstat(entry->d_name, &sb) == -1) {
             // Some error occurred. Throw an exception
             std::string errmsg("recv: ");
             errmsg += ::strerror(errno);

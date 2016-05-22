@@ -86,6 +86,7 @@ public:
     Socket accept();
     void connect(const char* host, const char* port);
     bool send(std::string data);
+    bool send(std::istream& data);
     bool recv(std::string& buffer, ssize_t len);
     bool recv(std::string& buffer);
     void close();
@@ -278,12 +279,14 @@ void handle_client(Socket s) {
         // Only send the file if it can be read
         if (file.good()) {
             // Read and send the file.
+            std::lock_guard<std::mutex> guard(output_mutex);
             msg << "Sending " << filename << " to " << s.get_host_ip()
                 << std::endl;
             output.emplace(msg.str().c_str());
         }
         else {
             // Some error occurred. Send a generic error message
+            std::lock_guard<std::mutex> guard(output_mutex);
             msg << "File read error. Sending error message to "
                 << s.get_host_ip() << std::endl;
             output.emplace(msg.str().c_str());
@@ -291,6 +294,13 @@ void handle_client(Socket s) {
         }
         
         // Attempt to send the specified file to the client over new socket
+        if (!s.send(file)) {
+            // The socket was closed before the file finished sending
+            std::lock_guard<std::mutex> guard(output_mutex);
+            msg << "Client disconnected before transfer was complete."
+                << std::endl;
+            output.emplace(msg.str().c_str());
+        }
     } else {
         // Invalid command; send error message over s
         s.send(std::string("INVALID COMMAND"));
@@ -569,6 +579,64 @@ bool Socket::send(std::string data) {
 
         // Remove the sent characters
         data = data.substr(bytes);
+    }
+
+    // Return true if socket is still open
+    return true;
+}
+
+/**
+ * Sends the specified binary data to the connected host.
+ *
+ * This function continues to send until all data has been sent
+ * or the socket is closed.
+ *
+ *  data    The binary data to send over the socket. The stream must be open.
+ *
+ * Returns whether the socket is still open.
+ */
+bool Socket::send(std::istream& data) {
+    ssize_t bytes = 0;
+    size_t length = 0;
+    size_t sent = 0;
+    
+    // Allocate a buffer for reading data from the stream before sending
+    char buf[BUFFER_SIZE];
+    
+    // Get length of the file
+    if (data) {
+        data.seekg(0, data.end);
+        length = data.tellg();
+        data.seekg(0, data.beg);
+    }
+
+    // Send until there is nothing left to send
+    while (sent < length) {
+        memset(buf, 0, BUFFER_SIZE);
+        // Load the file data into the buffer
+        data.read(buf, BUFFER_SIZE);
+        // Calculate the amount to send in this iteration
+        size_t to_send = length - sent < BUFFER_SIZE ? length - sent : BUFFER_SIZE;
+        // Send the data over the socket
+        bytes = ::send(_sd, buf, to_send, 0);
+        if (bytes == 0) {
+            // Socket was closed, return false
+            return false;
+        } else if (bytes == -1) {
+            if (errno == EINTR) {
+                // Keep sending if interrupted by signal
+                continue;
+            }
+            else {
+                // Some non-interrupt error occurred. Throw exception.
+                std::string errmsg("send: ");
+                errmsg += ::strerror(errno);
+                throw std::runtime_error(errmsg);
+            }
+        }
+
+        // Update the number of bytes sent
+        sent += bytes;
     }
 
     // Return true if socket is still open

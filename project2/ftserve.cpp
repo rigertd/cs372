@@ -122,7 +122,7 @@ std::vector<std::string> get_files_in_dir(const char*);
 std::string get_line(std::istringstream&);
 size_t get_file_size(std::ifstream&);
 void print_message(const std::string&);
-void free_buffer(std::istream*&, Command) {
+void free_buffer(std::istream*&, Command);
 
 /*========================================================*
  * Global variables
@@ -139,7 +139,7 @@ std::atomic<bool> is_shutting_down(false);
 std::map<std::string, Command> command_map {
     {LIST_COMMAND, Command_LIST},
     {GET_COMMAND, Command_GET}
-}
+};
 
 /*========================================================*
  * main function
@@ -350,7 +350,7 @@ void handle_client(Socket s) {
             return;
         }
         // Establish connection to client data port
-        msg << "std::cout << "Attempting to connect to port " << data_port << std::endl;
+        msg << "Attempting to connect to port " << data_port << std::endl;
         // Attempt to send the specified file to the client over new socket
         // if (!s.send(file)) {
             // // The socket was closed before the file finished sending

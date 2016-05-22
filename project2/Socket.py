@@ -136,5 +136,5 @@ class Socket:
             # Otherwise append to data already received
             received += len(data)
             buf.append(data)
-            
+
         return True, ''.join(buf)

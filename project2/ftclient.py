@@ -76,6 +76,11 @@ def main():
             print(ex)
             exit(1)
 
+        # Display required output in terminal window
+        if args.command == 'LIST':
+            print('Receiving directory structure from {0}:{1}'.format(args.server_host, args.data_port))
+        else:
+            print('Receiving "{0}" from {1}:{2}'.format(args.filename, args.server_host, args.data_port))
         # Receive the amount of data specified in the response
         is_open, data = data_sock.recv_all(int(response))
 
@@ -94,6 +99,7 @@ def main():
             f = open(outfile, 'w')
             f.write(data)
             f.close()
+            print('File transfer complete.')
 
     else:
         # Error message--print it and exit

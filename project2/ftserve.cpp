@@ -178,7 +178,7 @@ int main(int argc, char* argv[]) {
             // The SocketStream class abstracts away the details of sending
             // and receiving data over a socket.
             Socket s_client = s.accept();
-            std::cout << "Connection from " << s_client.get_host_ip() << "."
+            std::cout << "Connection from " << s_client.get_hostname() << "."
                 << std::endl;
 
             // Spawn a new thread to handle the connected client.
@@ -220,7 +220,7 @@ void handle_client(Socket s, int server_port) {
     // Get command from client
     if (!s.recv(inbuf)) {
         // Socket closed; client disconnected
-        msg << s.get_host_ip() << " disconnected" << std::endl;
+        msg << s.get_hostname() << " disconnected" << std::endl;
         print_message(msg);
         return;
     }
@@ -262,7 +262,7 @@ void handle_client(Socket s, int server_port) {
             std::for_each(files.begin(), files.end(), [&oss] (const std::string& str)
                 { oss << str << std::endl; });
             sendbuf = new std::istringstream(oss.str());
-            msg << "Sending directory contents to " << s.get_host_ip()
+            msg << "Sending directory contents to " << s.get_hostname()
                 << ":" << data_port << std::endl;
             print_message(msg);
         }
@@ -280,23 +280,23 @@ void handle_client(Socket s, int server_port) {
                 case EACCES:
                     // Access denied. Send an appropriate error message
                     msg << "Access denied. Sending error message to "
-                        << s.get_host_ip() << ":" << server_port << std::endl;
+                        << s.get_hostname() << ":" << server_port << std::endl;
                     print_message(msg);
-                    s.send(std::string("ACCESS DENIED\n"));
+                    s.send(std::string("ACCESS DENIED"));
                     break;
                 case ENOENT:
                     // File not found. Send an appropriate error message
                     msg << "File not found. Sending error message to "
-                        << s.get_host_ip() << ":" << server_port << std::endl;
+                        << s.get_hostname() << ":" << server_port << std::endl;
                     print_message(msg);
-                    s.send(std::string("FILE NOT FOUND\n"));
+                    s.send(std::string("FILE NOT FOUND"));
                     break;
                 default:
                     // Other error. Send a generic error message
                     msg << "Some other error occurred. Sending error message to "
-                        << s.get_host_ip() << ":" << server_port << std::endl;
+                        << s.get_hostname() << ":" << server_port << std::endl;
                     print_message(msg);
-                    s.send(std::string("ERROR OCCURRED\n"));
+                    s.send(std::string("ERROR OCCURRED"));
                     break;
                 }
                 s.close();
@@ -306,9 +306,9 @@ void handle_client(Socket s, int server_port) {
             // Send an error message if the client requested a directory
             if (S_ISDIR(sb.st_mode)) {
                 msg << "Specified file is a directory. Sending error message to "
-                    << s.get_host_ip() << ":" << server_port << std::endl;
+                    << s.get_hostname() << ":" << server_port << std::endl;
                 print_message(msg);
-                s.send(std::string("CANNOT TRANSFER DIRECTORY\n"));
+                s.send(std::string("CANNOT TRANSFER DIRECTORY"));
                 s.close();
                 return;
             }
@@ -319,14 +319,14 @@ void handle_client(Socket s, int server_port) {
             if (!static_cast<std::ifstream*>(sendbuf)->good()) {
                 // Some error occurred. Send a generic error message
                 msg << "File read error. Sending error message to "
-                    << s.get_host_ip() << ":" << server_port << std::endl;
+                    << s.get_hostname() << ":" << server_port << std::endl;
                 print_message(msg);
-                s.send(std::string("FILE READ ERROR\n"));
+                s.send(std::string("FILE READ ERROR"));
                 s.close();
                 free_buffer(sendbuf, cmd_it->second);
                 return;
             }
-            msg << "Sending \"" << filename << "\" to " << s.get_host_ip()
+            msg << "Sending \"" << filename << "\" to " << s.get_hostname()
                 << ":" << data_port << std::endl;
             print_message(msg);
         }
@@ -337,7 +337,7 @@ void handle_client(Socket s, int server_port) {
         // Wait for acknowledgement
         if (!s.recv(inbuf)) {
             // Socket closed; client disconnected
-            msg << s.get_host_ip() << " disconnected" << std::endl;
+            msg << s.get_hostname() << " disconnected" << std::endl;
             print_message(msg);
             free_buffer(sendbuf, cmd_it->second);
             return;
@@ -346,7 +346,7 @@ void handle_client(Socket s, int server_port) {
         if (cmd_string != ACK_COMMAND) {
             // Invalid acknowledgement response. Send error message
             msg << "Invalid response. Sending error message to "
-                << s.get_host_ip() << ":" << server_port << std::endl;
+                << s.get_hostname() << ":" << server_port << std::endl;
             print_message(msg);
             s.send(std::string("INVALID RESPONSE\n"));
             s.close();
@@ -359,6 +359,9 @@ void handle_client(Socket s, int server_port) {
             data_sock.connect(s.get_host_ip().c_str(), std::to_string(data_port).c_str());
         }
         catch (const std::runtime_error& ex) {
+            // If an exception occurs during the connection process,
+            // display an error message, free all memory, and exit
+            // the client handling thread
             msg << ex.what() << std::endl;
             print_message(msg);
             data_sock.close();
@@ -366,7 +369,7 @@ void handle_client(Socket s, int server_port) {
             s.close();
             return;
         }
-        
+
         // Send the data over the data socket
         if (!data_sock.send(sendbuf)) {
             // The socket was closed before the file finished sending
@@ -376,10 +379,10 @@ void handle_client(Socket s, int server_port) {
         }
         free_buffer(sendbuf, cmd_it->second);
 
-        // Wait for acknowledgement
+        // Wait for acknowledgement so we know the transfer was complete
         if (!s.recv(inbuf)) {
             // Socket closed; client disconnected
-            msg << s.get_host_ip()
+            msg << s.get_hostname()
                 << " disconnected before acknowledging receipt of data."
                 << std::endl;
             print_message(msg);
@@ -387,19 +390,25 @@ void handle_client(Socket s, int server_port) {
         else {
             cmd_string = get_line(inbuf);
             if (cmd_string != ACK_COMMAND) {
-                // Invalid acknowledgement response. Send error message
-                msg << "Invalid response. Sending error message to "
-                    << s.get_host_ip() << ":" << server_port << std::endl;
+                // Invalid acknowledgement response
+                msg << "Invalid response. File transfer might not be successful."
+                    << std::endl;
                 print_message(msg);
-                s.send(std::string("INVALID RESPONSE\n"));
             }
         }
         // Close the data socket
         data_sock.close();
     }
+    // Close the control socket
     s.close();
 }
 
+/**
+ * Frees any memory allocated for the input stream buffer.
+ *
+ *  buf     The buffer to free.
+ *  cmd     The command that the buffer was allocated for.
+ */
 void free_buffer(std::istream*& buf, Command cmd) {
     if (buf != nullptr) {
         switch (cmd) {
@@ -451,6 +460,13 @@ void display_output() {
     }
 }
 
+/**
+ * Gets a vector of directories and filenames stored in the specified location.
+ *
+ *  name    The name of the directory to search for files.
+ *
+ * Returns a vector containing a string for each file or directory name.
+ */
 std::vector<std::string> get_files_in_dir(const char* name) {
     std::vector<std::string> files;
     struct dirent* entry = nullptr;
@@ -640,6 +656,7 @@ void Socket::connect(const char* host, const char* port) {
         throw std::runtime_error(errmsg);
     }
 
+    
     // Loop through address structure results until connect succeeds
     for (current = _info; current != NULL; current = current->ai_next) {
         // Attempt to open a socket based on the remote host's address info
@@ -872,7 +889,7 @@ void Socket::close() {
 }
 
 /**
- * Gets the remote host IP address and port.
+ * Gets the remote host IP address, port, and DNS hostname.
  *
  * This function extracts the information for both IPv4 and IPv6 connections.
  *
@@ -880,6 +897,7 @@ void Socket::close() {
  */
 void Socket::get_remote_addr(struct sockaddr* sa) {
     char s[INET6_ADDRSTRLEN]; // temp storage buffer for IP address
+    char h[NI_MAXHOST];       // temp storage buffer for hostname
     void* in_addr = nullptr;
 
     // IPv4 connection
@@ -897,4 +915,14 @@ void Socket::get_remote_addr(struct sockaddr* sa) {
 
     ::inet_ntop(sa->sa_family, in_addr, s, sizeof(s));
     _host_ip.assign(s);
+    
+    // Get hostname
+    socketlen_t remote_addr_len = sizeof(struct sockaddr_storage);
+    int result = ::getnameinfo(sa, remote_addr_len, h, NI_MAXHOST, NULL, NULL, NULL);
+    if (result == 0) {
+        _hostname.assign(h);
+    }
+    else {
+        _hostname.assign("");
+    }
 }

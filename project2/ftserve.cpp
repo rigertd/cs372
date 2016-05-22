@@ -237,7 +237,7 @@ void handle_client(Socket s) {
         // Get the data port from the rest of the first line
         int data_port = std::stoi(get_line(inbuf));
         // Run the specified command
-        switch (*cmd_it) {
+        switch (cmd_it->second) {
         case Command_LIST:
             msg << "List directory requested on port " << s.get_port() 
                 << "." << std::endl;
@@ -275,21 +275,21 @@ void handle_client(Socket s) {
                 case EACCES:
                     // Access denied. Send an appropriate error message
                     msg << "Access denied. Sending error message to "
-                        << s.get_host_ip() << ":" << s.get_port << std::endl;
+                        << s.get_host_ip() << ":" << s.get_port() << std::endl;
                     print_message(msg.str());
                     s.send(std::string("ACCESS DENIED"));
                     break;
                 case ENOENT:
                     // File not found. Send an appropriate error message
                     msg << "File not found. Sending error message to "
-                        << s.get_host_ip() << ":" << s.get_port << std::endl;
+                        << s.get_host_ip() << ":" << s.get_port() << std::endl;
                     print_message(msg.str());
                     s.send(std::string("FILE NOT FOUND"));
                     break;
                 default:
                     // Other error. Send a generic error message
                     msg << "Some other error occurred. Sending error message to "
-                        << s.get_host_ip() << ":" << s.get_port << std::endl;
+                        << s.get_host_ip() << ":" << s.get_port() << std::endl;
                     print_message(msg.str());
                     s.send(std::string("ERROR OCCURRED"));
                     break;
@@ -301,7 +301,7 @@ void handle_client(Socket s) {
             // Send an error message if the client requested a directory
             if (S_ISDIR(sb.st_mode)) {
                 msg << "Specified file is a directory. Sending error message to "
-                    << s.get_host_ip() << ":" << s.get_port << std::endl;
+                    << s.get_host_ip() << ":" << s.get_port() << std::endl;
                 print_message(msg.str());
                 s.send(std::string("CANNOT SEND DIRECTORY"));
                 s.close();
@@ -314,7 +314,7 @@ void handle_client(Socket s) {
             if (!static_cast<std::ifstream*>(sendbuf)->good()) {
                 // Some error occurred. Send a generic error message
                 msg << "File read error. Sending error message to "
-                    << s.get_host_ip() << ":" << s.get_port << std::endl;
+                    << s.get_host_ip() << ":" << s.get_port() << std::endl;
                 print_message(msg.str());
                 s.send(std::string("FILE READ ERROR"));
                 s.close();
@@ -335,18 +335,18 @@ void handle_client(Socket s) {
             // Socket closed; client disconnected
             msg << s.get_host_ip() << " disconnected" << std::endl;
             print_message(msg.str());
-            free_buffer(sendbuf, *cmd_it);
+            free_buffer(sendbuf, cmd_it->second);
             return;
         }
         cmd_string = get_line(inbuf);
         if (cmd_string != ACK_COMMAND) {
             // Invalid acknowledgement response. Send error message
             msg << "Invalid response. Sending error message to "
-                << s.get_host_ip() << ":" << s.get_port << std::endl;
+                << s.get_host_ip() << ":" << s.get_port() << std::endl;
             print_message(msg.str());
             s.send(std::string("INVALID RESPONSE"));
             s.close();
-            free_buffer(sendbuf, *cmd_it);
+            free_buffer(sendbuf, cmd_it->second);
             return;
         }
         // Establish connection to client data port
@@ -368,11 +368,11 @@ void free_buffer(std::istream*& buf, Command cmd) {
     if (buf != nullptr) {
         switch (cmd) {
         case Command_LIST:
-            free(static_cast<std::istringstream>(buf));
+            free(static_cast<std::istringstream*>(buf));
             buf = nullptr;
             break;
         case Command_GET:
-            free(static_cast<std::ifstream>(buf));
+            free(static_cast<std::ifstream*>(buf));
             buf = nullptr;
             break;
         }

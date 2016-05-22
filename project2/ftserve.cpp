@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <atomic>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <map>
 #include <mutex>
@@ -277,7 +278,7 @@ void handle_client(Socket s, int server_port) {
                 << ":" << data_port << std::endl;
             print_message(msg);
         }
-        else if (cmd_it_second == Command_CD) {
+        else if (cmd_it->second == Command_CD) {
             // Get the directory name from the rest of the line
             std::string dirname = get_line(inbuf);
             msg << "Change directory to \"" << dirname << "\"requested."
@@ -530,6 +531,8 @@ void display_output() {
 std::vector<std::string> get_files_in_dir(const char* name) {
     std::vector<std::string> files;
     struct dirent* entry = nullptr;
+    std::ostringstream oss;
+    struct stat sb;
 
     // Attempt to open the specified directory
     DIR *d = opendir(name);
@@ -544,9 +547,44 @@ std::vector<std::string> get_files_in_dir(const char* name) {
     errno = 0;
     // Attempt to read all entries and add them to file list
     for (entry = readdir(d); entry != nullptr; entry = readdir(d)) {
-        // Skip the current and previous directory entries
-        if (::strcmp(entry->d_name, "..") != 0 && ::strcmp(entry->d_name, ".") != 0)
-            files.push_back(std::string(entry->d_name));
+        // Check what kind of entry it is
+        if (::stat(entry->d_name, &sb) == -1) {
+            // Some error occurred. Throw an exception
+            std::string errmsg("recv: ");
+            errmsg += ::strerror(errno);
+            throw std::runtime_error(errmsg);
+        }
+        
+        // Prepend with flag indicating what kind of entry it is
+        switch (sb.st_mode & S_IFMT) {
+        case S_IFBLK:
+            oss << "b   ";
+            break;
+        case S_IFCHR:
+            oss << "c   ";
+            break;
+        case S_IFDIR:
+            oss << "d   ";
+            break;
+        case S_IFIFO:
+            oss << "p   ";
+            break;
+        case S_IFLNK:
+            oss << "l   ";
+            break;
+        case S_IFREG:
+            oss << "    ";
+            break;
+        case S_IFSOCK:
+            oss << "s   ";
+            break;
+        default:
+            oss << "?   ";
+            break;
+        }
+        oss << entry->d_name;
+        files.push_back(oss.str());
+        oss.str("");
     }
 
     if (errno != 0) {

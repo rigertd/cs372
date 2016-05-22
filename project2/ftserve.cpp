@@ -123,6 +123,7 @@ std::string get_line(std::istringstream&);
 size_t get_file_size(std::ifstream&);
 void print_message(const std::string&);
 void free_buffer(std::istream*&, Command);
+size_t get_size(std::istream*);
 
 /*========================================================*
  * Global variables
@@ -260,6 +261,7 @@ void handle_client(Socket s) {
             msg << "Sending directory contents to " << s.get_host_ip()
                 << ":" << data_port << std::endl;
             print_message(msg.str());
+        }
         else if (cmd_it->second == Command_GET) {
             // Get the file name from the next line
             std::string filename = get_line(inbuf);

@@ -87,8 +87,8 @@ public:
     void connect(const char* host, const char* port);
     bool send(std::string data);
     bool send(std::ifstream& data);
-    bool recv(std::string& buffer, ssize_t len);
-    bool recv(std::string& buffer);
+    bool recv(std::istringstream& buffer, ssize_t len);
+    bool recv(std::istringstream& buffer);
     void close();
 
     std::string get_hostname() { return _hostname; }
@@ -115,6 +115,7 @@ void display_output();
 std::vector<std::string> get_files_in_dir(const char*);
 std::string get_line(std::istringstream&);
 size_t get_file_size(std::ifstream&);
+void print_message(std::string&);
 
 /*========================================================*
  * Global variables
@@ -197,25 +198,21 @@ int main(int argc, char* argv[]) {
  *  s  The Socket for the connected client.
  */
 void handle_client(Socket s) {
-    std::string input;
     std::istringstream inbuf;
     std::ostringstream msg;
+    std::string cmd;
     
     // Get command from client
-    if (!s.recv(input)) {
+    if (!s.recv(inbuf)) {
         // Socket closed; client disconnected
-        std::lock_guard<std::mutex> guard(output_mutex);
         msg << s.get_host_ip() << " disconnected" << std::endl;
-        output.emplace(msg.str().c_str());
+        print_message(msg.str());
         return;
     }
     
     // Command received
     // Extract first token to get command
-    inbuf.str(input);
-    std::string cmd;
     inbuf >> cmd;
-    std::cout << "Received command '" << cmd << "'" << std::endl;
     // Verify command
     if (cmd == LIST_COMMAND) {
         // Create vector to store list of files
@@ -226,7 +223,8 @@ void handle_client(Socket s) {
             files = get_files_in_dir(".");
         }
         catch (const std::runtime_error& ex) {
-            std::cout << ex.what() << std::endl;
+            msg << ex.what() << std::endl;
+            print_message(msg.str());
         }
         
         // Join the filenames into a single string for sending
@@ -236,14 +234,12 @@ void handle_client(Socket s) {
         // Send the size of the data to be sent
         s.send(std::to_string(ss.str().length()));
         // Wait for acknowledgement
-        if (!s.recv(input)) {
+        if (!s.recv(inbuf)) {
             // Socket closed; client disconnected
-            std::lock_guard<std::mutex> guard(output_mutex);
             msg << s.get_host_ip() << " disconnected" << std::endl;
-            output.emplace(msg.str().c_str());
+            print_message(msg.str());
             return;
         }
-        inbuf.str(input);
         cmd = get_line(inbuf);
         if (cmd == ACK_COMMAND) {
             // Send the contents of the CWD to the client over s
@@ -258,28 +254,26 @@ void handle_client(Socket s) {
         // Verify that file exists
         struct stat sb;
         if (stat(filename.c_str(), &sb) == -1) {
-            // Lock mutex before adding message to output queue
-            std::lock_guard<std::mutex> guard(output_mutex);
             switch (errno) {
             case EACCES:
                 // Access denied. Send an appropriate error message
                 msg << "Access denied. Sending error message to "
                     << s.get_host_ip() << std::endl;
-                output.emplace(msg.str().c_str());
+                print_message(msg.str());
                 s.send(std::string("ACCESS DENIED"));
                 break;
             case ENOENT:
                 // File not found. Send an appropriate error message
                 msg << "File not found. Sending error message to "
                     << s.get_host_ip() << std::endl;
-                output.emplace(msg.str().c_str());
+                print_message(msg.str());
                 s.send(std::string("FILE NOT FOUND"));
                 break;
             default:
                 // Other error. Send a generic error message
                 msg << "Some other error occurred. Sending error message to "
                     << s.get_host_ip() << std::endl;
-                output.emplace(msg.str().c_str());
+                print_message(msg.str());
                 s.send(std::string("ERROR OCCURRED"));
                 break;
             }
@@ -291,7 +285,7 @@ void handle_client(Socket s) {
         if (S_ISDIR(sb.st_mode)) {
             msg << "Client requested a directory. Sending error message to "
                 << s.get_host_ip() << std::endl;
-            output.emplace(msg.str().c_str());
+            print_message(msg.str());
             s.send(std::string("CANNOT SEND DIRECTORY"));
             s.close();
             return;
@@ -301,19 +295,17 @@ void handle_client(Socket s) {
         std::ifstream file(filename.c_str(), std::ios::binary);
         // Only send the file if it can be read
         if (file.good()) {
-            std::lock_guard<std::mutex> guard(output_mutex);
             msg << "Sending " << filename << " to " << s.get_host_ip()
                 << std::endl;
-            output.emplace(msg.str().c_str());
+            print_message(msg.str());
             // Send the file size over the control connection
             s.send(std::to_string(get_file_size(file)));
         }
         else {
             // Some error occurred. Send a generic error message
-            std::lock_guard<std::mutex> guard(output_mutex);
             msg << "File read error. Sending error message to "
                 << s.get_host_ip() << std::endl;
-            output.emplace(msg.str().c_str());
+            print_message(msg.str());
             s.send(std::string("FILE READ ERROR"));
             s.close();
             return;
@@ -334,6 +326,17 @@ void handle_client(Socket s) {
         s.send(std::string("INVALID COMMAND"));
     }
     s.close();
+}
+
+/**
+ * Prints a message to the terminal window on the server in a thread-safe
+ * manner.
+ *
+ *  msg     The message to print.
+ */
+void print_message(std::string msg) {
+    std::lock_guard<std::mutex> guard(output_mutex);
+    output.emplace(msg.c_str());
 }
 
 /**
@@ -681,18 +684,19 @@ bool Socket::send(std::ifstream& data) {
  * This function blocks until the specified amount of data is received,
  * or the socket is closed.
  *
- *  buffer  A string buffer to store the received data.
+ *  buffer  An istringstream buffer to store the received data.
  *  len     The length of the data to receive.
  *
  * Returns whether the socket is still open.
  */
-bool Socket::recv(std::string& buffer, ssize_t len) {
+bool Socket::recv(std::istringstream& buffer, ssize_t len) {
     ssize_t bytes;
     char buf[BUFFER_SIZE];
+    buffer.str("");
     buffer.clear();
     
     // Keep trying until 'len' bytes are received
-    while (buffer.size() < len) {
+    while (buffer.gcount() < len) {
         bytes = ::recv(_sd, buf, BUFFER_SIZE - 1, 0);
         
         if (bytes == 0) {
@@ -711,8 +715,8 @@ bool Socket::recv(std::string& buffer, ssize_t len) {
         }
         // Append null terminator
         buf[bytes] = '\0';
-        // Concatenate to end of string buffer
-        buffer.append(buf);
+        // Add to stringstream buffer
+        buffer << buf;
     }
 }
 
@@ -722,13 +726,14 @@ bool Socket::recv(std::string& buffer, ssize_t len) {
  * This function blocks until some data is received,
  * or the socket is closed.
  *
- *  buffer  A string buffer to store the received data.
+ *  buffer  An istringstream buffer to store the received data.
  *
  * Returns whether the socket is still open.
  */
-bool Socket::recv(std::string& buffer) {
+bool Socket::recv(std::istringstream& buffer) {
     ssize_t bytes;
     char buf[BUFFER_SIZE];
+    buffer.str("");
     buffer.clear();
     
     // Keep trying until something is received
@@ -752,8 +757,8 @@ bool Socket::recv(std::string& buffer) {
         
         // Append null terminator
         buf[bytes] = '\0';
-        // Add to string buffer
-        buffer.append(buf);
+        // Add to stringstream buffer
+        buffer << buf;
         // One data block received, return to caller
         return true;
     }

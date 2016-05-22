@@ -237,8 +237,7 @@ void handle_client(Socket s) {
         // Get the data port from the rest of the first line
         int data_port = std::stoi(get_line(inbuf));
         // Run the specified command
-        switch (cmd_it->second) {
-        case Command_LIST:
+        if (cmd_it->second == Command_LIST) {
             msg << "List directory requested on port " << s.get_port() 
                 << "." << std::endl;
             print_message(msg.str());
@@ -261,8 +260,7 @@ void handle_client(Socket s) {
             msg << "Sending directory contents to " << s.get_host_ip()
                 << ":" << data_port << std::endl;
             print_message(msg.str());
-            break;
-        case Command_GET:
+        else if (cmd_it->second == Command_GET) {
             // Get the file name from the next line
             std::string filename = get_line(inbuf);
             msg << "File \"" << filename << "\" requested on port " << s.get_port()
@@ -318,13 +316,12 @@ void handle_client(Socket s) {
                 print_message(msg.str());
                 s.send(std::string("FILE READ ERROR"));
                 s.close();
-                free_buffer(sendbuf, cmd);
+                free_buffer(sendbuf, cmd_it->second);
                 return;
             }
             msg << "Sending \"" << filename << "\" to " << s.get_host_ip()
                 << ":" << data_port << std::endl;
             print_message(msg.str());
-            break;
         }
         
         // Send the size of the data to send
@@ -359,7 +356,7 @@ void handle_client(Socket s) {
                 // << std::endl;
             // output.emplace(msg.str().c_str());
         // }
-        free_buffer(sendbuf, );
+        free_buffer(sendbuf, cmd_it->second);
     }
     s.close();
 }

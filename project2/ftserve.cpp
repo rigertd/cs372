@@ -358,10 +358,10 @@ void handle_client(Socket s, int server_port) {
         print_message(msg);
         
         Socket data_sock = Socket();
-        data_sock.connect(s.get_host_ip(), std::to_string(data_port).c_str());
+        data_sock.connect(s.get_host_ip().c_str(), std::to_string(data_port).c_str());
         
         // Send the data over the data socket
-        if (!data_socket.send(sendbuf)) {
+        if (!data_sock.send(sendbuf)) {
             // The socket was closed before the file finished sending
             msg << "Client disconnected before transfer was complete."
                 << std::endl;

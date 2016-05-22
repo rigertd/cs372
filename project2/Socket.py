@@ -37,7 +37,7 @@ class Socket:
         """
         Explicitly closes the socket.
         """
-        self.sock.shutdown()
+        self.sock.shutdown(socket.SHUT_RDWR)
         self.sock.close()
 
     def listen(self, port):
@@ -47,7 +47,7 @@ class Socket:
         Based on code in https://docs.python.org/3/library/socket.html
         """
         #Attempt to bind on the specified port using IPv4 or IPv6
-        for family, socktype, protocol, canonname, sockaddr in self.sock.getaddrinfo(None, port, socket.AF_UNSPEC, socket.SOCK_STREAM, 0, socket.AI_PASSIVE):
+        for family, socktype, protocol, canonname, sockaddr in socket.getaddrinfo(None, port, socket.AF_UNSPEC, socket.SOCK_STREAM, 0, socket.AI_PASSIVE):
             # Attempt to open a socket based on localhost address info
             try:
                 self.sock = socket.socket(family, socktype, protocol)

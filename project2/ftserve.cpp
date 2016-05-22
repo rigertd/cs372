@@ -197,6 +197,7 @@ int main(int argc, char* argv[]) {
  */
 void handle_client(Socket s) {
     std::string input;
+    std::istringstream inbuf;
     std::ostringstream msg;
     
     // Get command from client
@@ -210,7 +211,8 @@ void handle_client(Socket s) {
     
     // Command received
     // Extract first line (if more than one) without any line ending
-    std::string cmd = get_line(input);
+    inbuf.set(input);
+    std::string cmd = get_line(inbuf);
     std::vector<std::string> files;
     std::cout << "Received command '" << cmd << "'" << std::endl;
     // Verify command
@@ -237,14 +239,16 @@ void handle_client(Socket s) {
             output.emplace(msg.str().c_str());
             return;
         }
-        cmd = get_line(input);
+        inbuf.set(input);
+        cmd = get_line(inbuf);
         if (cmd == ACK_COMMAND) {
             // Send the contents of the CWD to the client over s
             s.send(ss.str());
         }
     } else if (cmd == GET_COMMAND) {
         // Get the file name from the next line
-        std::string filename = get_line(input);
+        inbuf.set(input);
+        std::string filename = get_line(inbuf);
         std::cout << "Checking for file " << filename << std::endl;
         // Verify that file exists
         struct stat sb;
@@ -375,22 +379,11 @@ std::vector<std::string> get_files_in_dir(const char* name) {
  *
  *  source  The string to get a line of text from.
  */
-std::string get_line(std::string& source) {
-    size_t eol = source.find_first_of("\r\n");
+std::string get_line(std::istringstream& source) {
     std::string temp;
-    if (eol == std::string::npos) {
-        temp = source;
-        source.clear();
-        return temp;
-    }
-    else {
-        temp = source.substr(0, eol);
-        eol = source.find_first_not_of("\r\n\t ");
-        std::cout << "next pos: " << eol << std::endl;
-        source = source.substr(eol);
-        std::cout << "remaining string: " << source << std::endl;
-        return temp;
-    }
+    std::getline(source, temp);
+    size_t pos = temp.find_last_not_of("\r\n\t ");
+    return temp.substr(0, pos + 1);
 }
 
 /**

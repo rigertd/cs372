@@ -414,7 +414,7 @@ void display_output() {
         std::lock_guard<std::mutex> guard(output_mutex);
         // Display all queued output messages
         while (!output.empty()) {
-            std::cout << output.front() << std::endl;
+            std::cout << output.front() << std::flush;
             output.pop();
         }
         

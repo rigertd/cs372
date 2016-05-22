@@ -692,6 +692,7 @@ bool Socket::send(std::ifstream& data) {
 bool Socket::recv(std::istringstream& buffer, ssize_t len) {
     ssize_t bytes;
     char buf[BUFFER_SIZE];
+    std::ostringstream received;
     buffer.str("");
     buffer.clear();
     
@@ -716,8 +717,13 @@ bool Socket::recv(std::istringstream& buffer, ssize_t len) {
         // Append null terminator
         buf[bytes] = '\0';
         // Add to stringstream buffer
-        buffer << buf;
+        received << buf;
     }
+    
+    // Update input buffer with received data
+    buffer.str(received.str());
+    
+    return true;
 }
 
 /**
@@ -757,8 +763,8 @@ bool Socket::recv(std::istringstream& buffer) {
         
         // Append null terminator
         buf[bytes] = '\0';
-        // Add to stringstream buffer
-        buffer << buf;
+        // Set stringstream buffer to received data
+        buffer.str(buf);
         // One data block received, return to caller
         return true;
     }

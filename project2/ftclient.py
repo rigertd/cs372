@@ -111,18 +111,20 @@ def get_unique_filename(name):
     """
     Returns a filename that is guaranteed to be unique in the specified directory.
     """
-    outfile = name
-    if os.path.exists(name):
+    if not os.path.exists(name):
+        return name
+    else:
         m = re.match(r'(.*\()(\d+)(\))(\..+)?', name, re.IGNORECASE)
         if m:
-            outfile = '{0}{1}{2}'.format(m.groups()[0], int(m.groups()[1]) + 1, m.groups()[2])
+            name = '{0}{1}{2}'.format(m.groups()[0], int(m.groups()[1]) + 1, m.groups()[2])
         else:
-            parts = outfile.split('.')
+            parts = name.split('.')
             if len(parts) > 1:
-                outfile = '.'.join(parts[:-1]) + '(1).' + parts[-1]
+                name = '.'.join(parts[:-1]) + '(1).' + parts[-1]
             else:
-                outfile += '(1)'
-    return outfile
+                name += '(1)'
+    # Recursively call until a unique filename is acquired
+    return get_unique_filename(name)
 
 def parse_args():
     """

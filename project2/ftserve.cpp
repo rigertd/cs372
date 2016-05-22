@@ -281,9 +281,11 @@ void handle_client(Socket s) {
             return;
         }
         // Open the file
+        std::cout << "File exists... opening" << std::endl;
         std::ifstream file(filename.c_str(), std::ios::binary);
         // Only send the file if it can be read
         if (file.good()) {
+            std::cout << "File open... getting mutex lock on output" << std::endl;
             // Read and send the file.
             std::lock_guard<std::mutex> guard(output_mutex);
             msg << "Sending " << filename << " to " << s.get_host_ip()
@@ -302,6 +304,7 @@ void handle_client(Socket s) {
         }
         
         // Attempt to send the specified file to the client over new socket
+        std::cout << "Actually sending file" << std::endl;
         if (!s.send(file)) {
             // The socket was closed before the file finished sending
             std::lock_guard<std::mutex> guard(output_mutex);
@@ -334,8 +337,8 @@ void display_output() {
             output.pop();
         }
         
-        // Sleep for 1 ms to avoid consuming too much CPU time
-        ::usleep(1000);
+        // Sleep for 10 ms to avoid consuming too much CPU time
+        ::usleep(10000);
     }
 }
 

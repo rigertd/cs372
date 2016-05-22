@@ -26,6 +26,7 @@ import readline
 import sys
 import select
 import time
+import re
 from Socket import Socket
 from argparse import ArgumentParser
 
@@ -83,8 +84,15 @@ def main():
         # Close the data socket
         data_sock.close()
 
-        print(data)
-
+        # Display data if directory listing, otherwise write to disk
+        if args.command == 'LIST':
+            sys.stdout.write(data)
+            sys.stdout.flush()
+        elif args.command == 'GET':
+            outfile = get_unique_filename(args.filename)
+            f = open(outfile, 'w')
+            f.write(data)
+            f.close()
 
     else:
         # Error message--print it and exit
@@ -92,6 +100,22 @@ def main():
         control_sock.close()
         exit(1)
 
+def get_unique_filename(name):
+    """
+    Returns a filename that is guaranteed to be unique in the specified directory.
+    """
+    outfile = name
+    if os.path.exists(name):
+        m = re.match(r'(.*\()(\d+)(\))(\..+)?', name, re.IGNORECASE)
+        if m:
+            outfile = '{0}{1}{2}'.format(m.groups()[0], int(m.groups()[1]) + 1, m.groups()[2])
+        else:
+            parts = outfile.split('.')
+            if len(parts) > 1:
+                outfile = ''.join(parts[:-1]) + '1' + parts[-1]
+            else:
+                outfile += '(1)'
+    return outfile
 
 def parse_args():
     """

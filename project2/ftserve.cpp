@@ -308,7 +308,7 @@ void handle_client(Socket s, int server_port) {
                 msg << "Specified file is a directory. Sending error message to "
                     << s.get_host_ip() << ":" << server_port << std::endl;
                 print_message(msg);
-                s.send(std::string("CANNOT SEND DIRECTORY\n"));
+                s.send(std::string("CANNOT TRANSFER DIRECTORY\n"));
                 s.close();
                 return;
             }

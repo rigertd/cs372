@@ -211,7 +211,7 @@ void handle_client(Socket s) {
     
     // Command received
     // Extract first line (if more than one) without any line ending
-    inbuf.set(input);
+    inbuf.str(input);
     std::string cmd = get_line(inbuf);
     std::vector<std::string> files;
     std::cout << "Received command '" << cmd << "'" << std::endl;
@@ -239,7 +239,7 @@ void handle_client(Socket s) {
             output.emplace(msg.str().c_str());
             return;
         }
-        inbuf.set(input);
+        inbuf.str(input);
         cmd = get_line(inbuf);
         if (cmd == ACK_COMMAND) {
             // Send the contents of the CWD to the client over s
@@ -247,7 +247,7 @@ void handle_client(Socket s) {
         }
     } else if (cmd == GET_COMMAND) {
         // Get the file name from the next line
-        inbuf.set(input);
+        inbuf.str(input);
         std::string filename = get_line(inbuf);
         std::cout << "Checking for file " << filename << std::endl;
         // Verify that file exists

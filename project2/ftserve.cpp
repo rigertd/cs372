@@ -87,7 +87,7 @@ public:
     Socket accept();
     void connect(const char* host, const char* port);
     bool send(std::string data);
-    bool send(std::ifstream& data);
+    bool send(std::istream* data);
     bool recv(std::istringstream& buffer, ssize_t len);
     bool recv(std::istringstream& buffer);
     void close();

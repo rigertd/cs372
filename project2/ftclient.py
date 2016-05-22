@@ -27,6 +27,7 @@ import sys
 import select
 import time
 import re
+import os
 from Socket import Socket
 from argparse import ArgumentParser
 
@@ -112,7 +113,7 @@ def get_unique_filename(name):
         else:
             parts = outfile.split('.')
             if len(parts) > 1:
-                outfile = ''.join(parts[:-1]) + '1' + parts[-1]
+                outfile = '.'.join(parts[:-1]) + '(1).' + parts[-1]
             else:
                 outfile += '(1)'
     return outfile

@@ -280,6 +280,17 @@ void handle_client(Socket s) {
             s.close();
             return;
         }
+        
+        // Send an error message if the client requested a directory
+        if (S_ISDIR(sb.st_mode)) {
+            msg << "Client requested a directory. Sending error message to "
+                << s.get_host_ip() << std::endl;
+            output.emplace(msg.str().c_str());
+            s.send(std::string("CANNOT SEND DIRECTORY"));
+            s.close()
+            return;
+        }
+        
         // Open the file
         std::cout << "File exists... opening" << std::endl;
         std::ifstream file(filename.c_str(), std::ios::binary);

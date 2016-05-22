@@ -7,7 +7,7 @@ Class:      CS372 Spring 2016
 Assignment: Project #2
 
 This program connects to ftserve and either requests a directory listing,
-a change of working directory, or the transfer of a file.
+a change of directory, or the transfer of a file.
 All files are transferred as binary data.
 
 Command-line syntax:
@@ -18,7 +18,7 @@ This program takes the following arguments:
     - server_port   -- Port number that the server is listening on
     - -l, --list    -- Tells the server to send a list of files
     - -g, --get     -- Tells the server to send the specified FILENAME
-    - -c, --cd      -- Tells the server to change the working directory
+    - -c, --cd      -- Tells the server to change the directory
     - data_port     -- Port number over which server sends data to client
 """
 

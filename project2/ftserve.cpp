@@ -281,7 +281,7 @@ void handle_client(Socket s, int server_port) {
         else if (cmd_it->second == Command_CD) {
             // Get the directory name from the rest of the line
             std::string dirname = get_line(inbuf);
-            msg << "Change directory to \"" << dirname << "\"requested."
+            msg << "Change directory to \"" << dirname << "\" requested."
                 << std::endl;
             print_message(msg);
             if (::chdir(dirname.c_str()) == -1) {
@@ -318,7 +318,7 @@ void handle_client(Socket s, int server_port) {
                 s.close();
                 return;
             }
-            
+
             // Directory successfully changed
             char* cwd = ::get_current_dir_name();
             sendbuf = new std::istringstream(cwd);
@@ -474,6 +474,7 @@ void free_buffer(std::istream*& buf, Command cmd) {
     if (buf != nullptr) {
         switch (cmd) {
         case Command_LIST:
+        case Command_CD:
             free(static_cast<std::istringstream*>(buf));
             buf = nullptr;
             break;
@@ -554,7 +555,7 @@ std::vector<std::string> get_files_in_dir(const char* name) {
             errmsg += ::strerror(errno);
             throw std::runtime_error(errmsg);
         }
-        
+
         // Prepend with flag indicating what kind of entry it is
         switch (sb.st_mode & S_IFMT) {
         case S_IFBLK:
@@ -754,7 +755,7 @@ void Socket::connect(const char* host, const char* port) {
         throw std::runtime_error(errmsg);
     }
 
-    
+
     // Loop through address structure results until connect succeeds
     for (current = _info; current != NULL; current = current->ai_next) {
         // Attempt to open a socket based on the remote host's address info
@@ -1013,7 +1014,7 @@ void Socket::get_remote_addr(struct sockaddr* sa) {
 
     ::inet_ntop(sa->sa_family, in_addr, s, sizeof(s));
     _host_ip.assign(s);
-    
+
     // Get hostname
     socklen_t remote_addr_len = sizeof(struct sockaddr_storage);
     int result = ::getnameinfo(sa, remote_addr_len, h, NI_MAXHOST, NULL, 0, 0);

@@ -354,11 +354,18 @@ void handle_client(Socket s, int server_port) {
             return;
         }
         // Establish connection to client data port
-        msg << "Attempting to connect to port " << data_port << std::endl;
-        print_message(msg);
-        
         Socket data_sock = Socket();
-        data_sock.connect(s.get_host_ip().c_str(), std::to_string(data_port).c_str());
+        try {
+            data_sock.connect(s.get_host_ip().c_str(), std::to_string(data_port).c_str());
+        }
+        catch (const std::runtime_error& ex) {
+            msg << ex.what() << std::endl;
+            print_message(msg);
+            data_sock.close();
+            free_buffer(sendbuf, cmd_it->second);
+            s.close();
+            return;
+        }
         
         // Send the data over the data socket
         if (!data_sock.send(sendbuf)) {
@@ -368,6 +375,27 @@ void handle_client(Socket s, int server_port) {
             print_message(msg);
         }
         free_buffer(sendbuf, cmd_it->second);
+
+        // Wait for acknowledgement
+        if (!s.recv(inbuf)) {
+            // Socket closed; client disconnected
+            msg << s.get_host_ip()
+                << " disconnected before acknowledging receipt of data."
+                << std::endl;
+            print_message(msg);
+        }
+        else {
+            cmd_string = get_line(inbuf);
+            if (cmd_string != ACK_COMMAND) {
+                // Invalid acknowledgement response. Send error message
+                msg << "Invalid response. Sending error message to "
+                    << s.get_host_ip() << ":" << server_port << std::endl;
+                print_message(msg);
+                s.send(std::string("INVALID RESPONSE\n"));
+            }
+        }
+        // Close the data socket
+        data_sock.close();
     }
     s.close();
 }

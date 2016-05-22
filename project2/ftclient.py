@@ -116,7 +116,7 @@ def get_unique_filename(name):
     else:
         m = re.match(r'(.*\()(\d+)(\))(\..+)?', name, re.IGNORECASE)
         if m:
-            name = '{0}{1}{2}{3}'.format(m.groups()[0], int(m.groups()[1]) + 1, m.groups()[2], m.groups()[3])
+            name = '{0}{1}{2}'.format(m.groups()[0], int(m.groups()[1]) + 1, ''.join(m.groups()[2:]))
         else:
             parts = name.split('.')
             if len(parts) > 1:

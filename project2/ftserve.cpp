@@ -92,7 +92,17 @@ public:
     bool recv(std::istringstream& buffer);
     void close();
 
-    std::string get_hostname() const { return _hostname; }
+    /**
+     * Gets the hostname of the remote host.
+     *
+     * Returns the hostname or the IP address if the hostname cannot be found.
+     */
+    std::string get_hostname() const {
+        if (_hostname.size() > 0)
+            return _hostname;
+        else
+            return _host_ip;
+    }
     std::string get_host_ip() const { return _host_ip; }
     std::string get_port() const { return _port; }
 
@@ -225,8 +235,6 @@ void handle_client(Socket s, int server_port) {
         return;
     }
 
-    // Command received
-    std::cout << "Message received: \"" << inbuf.str() << "\"" << std::endl;
     // Extract first token to get command
     inbuf >> cmd_string;
     // Verify command

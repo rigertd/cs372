@@ -120,7 +120,7 @@ class Socket:
         else:
             return True, buf
 
-    def recv(self, length):
+    def recv_all(self, length):
         """
         Receives the specified number of bytes of data.
         Returns a tuple including whether the socket is still open,

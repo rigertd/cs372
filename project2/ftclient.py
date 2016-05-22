@@ -75,7 +75,7 @@ def main():
             exit(1)
 
         # Receive the amount of data specified in the response
-        is_open, data = data_sock.recv(int(response))
+        is_open, data = data_sock.recv_all(int(response))
 
         # Close the data socket
         data_sock.close()

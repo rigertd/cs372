@@ -116,7 +116,7 @@ enum Command {
 /*========================================================*
  * Forward declarations
  *========================================================*/
-void handle_client(Socket);
+void handle_client(Socket, int);
 void display_output();
 std::vector<std::string> get_files_in_dir(const char*);
 std::string get_line(std::istringstream&);
@@ -183,7 +183,7 @@ int main(int argc, char* argv[]) {
 
             // Spawn a new thread to handle the connected client.
             // Detach the thread because it runs independently.
-            std::thread th(handle_client, s_client);
+            std::thread th(handle_client, s_client, std::stoi(argv[1]));
             th.detach();
         }
         catch (const std::runtime_error& ex) {
@@ -209,9 +209,10 @@ int main(int argc, char* argv[]) {
  * This function is intended to be run in a separate thread so that new
  * clients can continue to be accepted in the main thread.
  *
- *  s  The Socket for the connected client.
+ *  s               The Socket for the connected client.
+ *  server_port     The command port on the server.
  */
-void handle_client(Socket s) {
+void handle_client(Socket s, int server_port) {
     std::istringstream inbuf;
     std::ostringstream msg;
     std::string cmd_string;
@@ -239,7 +240,7 @@ void handle_client(Socket s) {
         int data_port = std::stoi(get_line(inbuf));
         // Run the specified command
         if (cmd_it->second == Command_LIST) {
-            msg << "List directory requested on port " << s.get_port() 
+            msg << "List directory requested on port " << data_port 
                 << "." << std::endl;
             print_message(msg.str());
             // Create vector to store list of files
@@ -265,7 +266,7 @@ void handle_client(Socket s) {
         else if (cmd_it->second == Command_GET) {
             // Get the file name from the next line
             std::string filename = get_line(inbuf);
-            msg << "File \"" << filename << "\" requested on port " << s.get_port()
+            msg << "File \"" << filename << "\" requested on port " << data_port
                 << "." << std::endl;
             
             // Verify that file exists
@@ -275,21 +276,21 @@ void handle_client(Socket s) {
                 case EACCES:
                     // Access denied. Send an appropriate error message
                     msg << "Access denied. Sending error message to "
-                        << s.get_host_ip() << ":" << s.get_port() << std::endl;
+                        << s.get_host_ip() << ":" << server_port << std::endl;
                     print_message(msg.str());
                     s.send(std::string("ACCESS DENIED"));
                     break;
                 case ENOENT:
                     // File not found. Send an appropriate error message
                     msg << "File not found. Sending error message to "
-                        << s.get_host_ip() << ":" << s.get_port() << std::endl;
+                        << s.get_host_ip() << ":" << server_port << std::endl;
                     print_message(msg.str());
                     s.send(std::string("FILE NOT FOUND"));
                     break;
                 default:
                     // Other error. Send a generic error message
                     msg << "Some other error occurred. Sending error message to "
-                        << s.get_host_ip() << ":" << s.get_port() << std::endl;
+                        << s.get_host_ip() << ":" << server_port << std::endl;
                     print_message(msg.str());
                     s.send(std::string("ERROR OCCURRED"));
                     break;
@@ -301,7 +302,7 @@ void handle_client(Socket s) {
             // Send an error message if the client requested a directory
             if (S_ISDIR(sb.st_mode)) {
                 msg << "Specified file is a directory. Sending error message to "
-                    << s.get_host_ip() << ":" << s.get_port() << std::endl;
+                    << s.get_host_ip() << ":" << server_port << std::endl;
                 print_message(msg.str());
                 s.send(std::string("CANNOT SEND DIRECTORY"));
                 s.close();
@@ -314,7 +315,7 @@ void handle_client(Socket s) {
             if (!static_cast<std::ifstream*>(sendbuf)->good()) {
                 // Some error occurred. Send a generic error message
                 msg << "File read error. Sending error message to "
-                    << s.get_host_ip() << ":" << s.get_port() << std::endl;
+                    << s.get_host_ip() << ":" << server_port << std::endl;
                 print_message(msg.str());
                 s.send(std::string("FILE READ ERROR"));
                 s.close();
@@ -341,7 +342,7 @@ void handle_client(Socket s) {
         if (cmd_string != ACK_COMMAND) {
             // Invalid acknowledgement response. Send error message
             msg << "Invalid response. Sending error message to "
-                << s.get_host_ip() << ":" << s.get_port() << std::endl;
+                << s.get_host_ip() << ":" << server_port << std::endl;
             print_message(msg.str());
             s.send(std::string("INVALID RESPONSE"));
             s.close();

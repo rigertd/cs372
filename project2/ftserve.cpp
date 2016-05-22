@@ -114,6 +114,7 @@ void handle_client(Socket);
 void display_output();
 std::vector<std::string> get_files_in_dir(const char*);
 std::string get_line(std::istringstream&);
+size_t get_file_size(std::ifstream&);
 
 /*========================================================*
  * Global variables
@@ -210,13 +211,16 @@ void handle_client(Socket s) {
     }
     
     // Command received
-    // Extract first line (if more than one) without any line ending
+    // Extract first token to get command
     inbuf.str(input);
-    std::string cmd = get_line(inbuf);
-    std::vector<std::string> files;
+    std::string cmd;
+    inbuf >> cmd;
     std::cout << "Received command '" << cmd << "'" << std::endl;
     // Verify command
     if (cmd == LIST_COMMAND) {
+        // Create vector to store list of files
+        std::vector<std::string> files;
+        
         // Get a list of files in the current directory
         try {
             files = get_files_in_dir(".");
@@ -246,9 +250,11 @@ void handle_client(Socket s) {
             s.send(ss.str());
         }
     } else if (cmd == GET_COMMAND) {
+        // Get the data port from the rest of the first line
+        std::string port_str = get_line(inbuf);
+        int data_port = std::stoi(port_str);
         // Get the file name from the next line
         std::string filename = get_line(inbuf);
-        std::cout << "Checking for file " << filename << std::endl;
         // Verify that file exists
         struct stat sb;
         if (stat(filename.c_str(), &sb) == -1) {
@@ -292,16 +298,15 @@ void handle_client(Socket s) {
         }
         
         // Open the file
-        std::cout << "File exists... opening" << std::endl;
         std::ifstream file(filename.c_str(), std::ios::binary);
         // Only send the file if it can be read
         if (file.good()) {
-            std::cout << "File open... getting mutex lock on output" << std::endl;
-            // Read and send the file.
             std::lock_guard<std::mutex> guard(output_mutex);
             msg << "Sending " << filename << " to " << s.get_host_ip()
                 << std::endl;
             output.emplace(msg.str().c_str());
+            // Send the file size over the control connection
+            s.send(std::to_string(get_file_size(file)));
         }
         else {
             // Some error occurred. Send a generic error message
@@ -314,15 +319,16 @@ void handle_client(Socket s) {
             return;
         }
         
+        // Establish connection to client data port
+        std::cout << "Attempting to connect to port " << data_port << std::endl;
         // Attempt to send the specified file to the client over new socket
-        std::cout << "Actually sending file" << std::endl;
-        if (!s.send(file)) {
-            // The socket was closed before the file finished sending
-            std::lock_guard<std::mutex> guard(output_mutex);
-            msg << "Client disconnected before transfer was complete."
-                << std::endl;
-            output.emplace(msg.str().c_str());
-        }
+        // if (!s.send(file)) {
+            // // The socket was closed before the file finished sending
+            // std::lock_guard<std::mutex> guard(output_mutex);
+            // msg << "Client disconnected before transfer was complete."
+                // << std::endl;
+            // output.emplace(msg.str().c_str());
+        // }
     } else {
         // Invalid command; send error message over s
         s.send(std::string("INVALID COMMAND"));
@@ -397,6 +403,23 @@ std::string get_line(std::istringstream& source) {
     std::getline(source, temp);
     size_t pos = temp.find_last_not_of("\r\n\t ");
     return temp.substr(0, pos + 1);
+}
+
+/**
+ * Gets the number of bytes available in an ifstream.
+ *
+ *  fs  The ifstream to get the size of.
+ *
+ * Returns the number of bytes in the specified ifstream.
+ */
+size_t get_file_size(std::ifstream& fs) {
+    size_t length = -1;
+    if (fs) {
+        fs.seekg(0, fs.end);
+        length = data.tellg();
+        fs.seekg(0, fs.beg);
+    }
+    return length;
 }
 
 /**
@@ -617,11 +640,7 @@ bool Socket::send(std::ifstream& data) {
     char buf[BUFFER_SIZE];
     
     // Get length of the file
-    if (data) {
-        data.seekg(0, data.end);
-        length = data.tellg();
-        data.seekg(0, data.beg);
-    }
+    length = get_file_size(data);
 
     // Send until there is nothing left to send
     while (sent < length) {

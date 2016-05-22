@@ -66,7 +66,7 @@ public:
     * Optionally sets the file descriptor and listen queue length.
     *
     *  sd          The initial socket descriptor value.
-    *  queuelen    The queue size for incoming connections. 
+    *  queuelen    The queue size for incoming connections.
     */
     Socket(int sd = -1, int queuelen = SOCKET_CONNECTION_QUEUE) {
         _queue_len = queuelen;
@@ -171,14 +171,14 @@ int main(int argc, char* argv[]) {
     // Start a thread to handle the display of terminal output from
     // connected clients.
     std::thread output_thread (display_output);
-    
+
     // Accept incoming control connections until interrupt
     while (true) {
         try {
             // The SocketStream class abstracts away the details of sending
             // and receiving data over a socket.
             Socket s_client = s.accept();
-            std::cout << "Connection from " << s_client.get_host_ip() << "." 
+            std::cout << "Connection from " << s_client.get_host_ip() << "."
                 << std::endl;
 
             // Spawn a new thread to handle the connected client.
@@ -190,7 +190,7 @@ int main(int argc, char* argv[]) {
             std::cout << ex.what() << std::endl;
         }
     }
-    
+
     // Join the output thread before terminating.
     output_thread.join();
 
@@ -216,7 +216,7 @@ void handle_client(Socket s, int server_port) {
     std::istringstream inbuf;
     std::ostringstream msg;
     std::string cmd_string;
-    
+
     // Get command from client
     if (!s.recv(inbuf)) {
         // Socket closed; client disconnected
@@ -224,7 +224,7 @@ void handle_client(Socket s, int server_port) {
         print_message(msg);
         return;
     }
-    
+
     // Command received
     std::cout << "Message received: \"" << inbuf.str() << "\"" << std::endl;
     // Extract first token to get command
@@ -237,11 +237,12 @@ void handle_client(Socket s, int server_port) {
     }
     else {
         std::istream* sendbuf = nullptr;
-        // Get the data port from the rest of the first line
-        int data_port = std::stoi(get_line(inbuf));
+        // Get the data port from the next token
+        int data_port;
+        inbuf >> data_port;
         // Run the specified command
         if (cmd_it->second == Command_LIST) {
-            msg << "List directory requested on port " << data_port 
+            msg << "List directory requested on port " << data_port
                 << "." << std::endl;
             print_message(msg);
             // Create vector to store list of files
@@ -255,10 +256,10 @@ void handle_client(Socket s, int server_port) {
                 print_message(msg);
                 return;
             }
-            
+
             // Join the filenames into a single string for sending
             std::ostringstream oss;
-            std::for_each(files.begin(), files.end(), [&oss] (const std::string& str) 
+            std::for_each(files.begin(), files.end(), [&oss] (const std::string& str)
                 { oss << str << std::endl; });
             sendbuf = new std::istringstream(oss.str());
             msg << "Sending directory contents to " << s.get_host_ip()
@@ -266,12 +267,12 @@ void handle_client(Socket s, int server_port) {
             print_message(msg);
         }
         else if (cmd_it->second == Command_GET) {
-            // Get the file name from the next line
+            // Get the file name from the rest of the line
             std::string filename = get_line(inbuf);
             msg << "File \"" << filename << "\" requested on port " << data_port
                 << "." << std::endl;
             print_message(msg);
-            
+
             // Verify that file exists
             struct stat sb;
             if (stat(filename.c_str(), &sb) == -1) {
@@ -301,7 +302,7 @@ void handle_client(Socket s, int server_port) {
                 s.close();
                 return;
             }
-            
+
             // Send an error message if the client requested a directory
             if (S_ISDIR(sb.st_mode)) {
                 msg << "Specified file is a directory. Sending error message to "
@@ -311,7 +312,7 @@ void handle_client(Socket s, int server_port) {
                 s.close();
                 return;
             }
-            
+
             // Open the file
             sendbuf = new std::ifstream(filename.c_str(), std::ios::binary);
             // Only send the file if it can be read
@@ -329,10 +330,10 @@ void handle_client(Socket s, int server_port) {
                 << ":" << data_port << std::endl;
             print_message(msg);
         }
-        
+
         // Send the size of the data to send
         s.send(std::to_string(get_size(sendbuf)));
-        
+
         // Wait for acknowledgement
         if (!s.recv(inbuf)) {
             // Socket closed; client disconnected
@@ -355,14 +356,17 @@ void handle_client(Socket s, int server_port) {
         // Establish connection to client data port
         msg << "Attempting to connect to port " << data_port << std::endl;
         print_message(msg);
-        // Attempt to send the specified file to the client over new socket
-        // if (!s.send(file)) {
-            // // The socket was closed before the file finished sending
-            // std::lock_guard<std::mutex> guard(output_mutex);
-            // msg << "Client disconnected before transfer was complete."
-                // << std::endl;
-            // output.emplace(msg.str().c_str());
-        // }
+        
+        Socket data_sock = Socket();
+        data_sock.connect(s.get_host_ip(), std::to_string(data_port).c_str());
+        
+        // Send the data over the data socket
+        if (!data_socket.send(sendbuf)) {
+            // The socket was closed before the file finished sending
+            msg << "Client disconnected before transfer was complete."
+                << std::endl;
+            print_message(msg);
+        }
         free_buffer(sendbuf, cmd_it->second);
     }
     s.close();
@@ -415,14 +419,14 @@ void display_output() {
             std::cout << output.front() << std::flush;
             output.pop();
         }
-        
+
     }
 }
 
 std::vector<std::string> get_files_in_dir(const char* name) {
     std::vector<std::string> files;
     struct dirent* entry = nullptr;
-    
+
     // Attempt to open the specified directory
     DIR *d = opendir(name);
     if (d == nullptr) {
@@ -431,7 +435,7 @@ std::vector<std::string> get_files_in_dir(const char* name) {
         errmsg += ::strerror(errno);
         throw std::runtime_error(errmsg);
     }
-    
+
     // Set errno to 0 to detect any readdir errors
     errno = 0;
     // Attempt to read all entries and add them to file list
@@ -440,29 +444,29 @@ std::vector<std::string> get_files_in_dir(const char* name) {
         if (::strcmp(entry->d_name, "..") != 0 && ::strcmp(entry->d_name, ".") != 0)
             files.push_back(std::string(entry->d_name));
     }
-    
+
     if (errno != 0) {
         // Some error occurred. Throw an exception
         std::string errmsg("recv: ");
         errmsg += ::strerror(errno);
         throw std::runtime_error(errmsg);
     }
-    
+
     // Everything worked if execution reaches here
     return files;
 }
 
 /**
- * Gets a line of text from the specified string, removes it
- * from the string and returns it as a separate string.
+ * Gets a trimmed line of text from the specified stream.
  *
- *  source  The string to get a line of text from.
+ *  source  The istringstream to get a line of text from.
  */
 std::string get_line(std::istringstream& source) {
     std::string temp;
     std::getline(source, temp);
-    size_t pos = temp.find_last_not_of("\r\n\t ");
-    return temp.substr(0, pos + 1);
+    size_t start_pos = temp.find_first_not_of("\r\n\t ");
+    size_t end_pos = temp.find_last_not_of("\r\n\t ");
+    return temp.substr(start_pos, end_pos + 1);
 }
 
 /**
@@ -550,7 +554,7 @@ void Socket::listen(const char* port) {
         errmsg += ::strerror(errno);
         throw std::runtime_error(errmsg);
     }
-    
+
 }
 
 /**
@@ -574,7 +578,7 @@ Socket Socket::accept() {
 
     // Create a new Socket based on the returned descriptor
     Socket s_client (new_sd);
-    
+
     // Get the remote IP and port information
     s_client.get_remote_addr(reinterpret_cast<struct sockaddr*>(&remote_addr));
 
@@ -615,16 +619,16 @@ void Socket::connect(const char* host, const char* port) {
         if (_sd == -1) {
             continue; // Try next on error
         }
-        
+
         if (::connect(_sd, current->ai_addr, current->ai_addrlen) == -1) {
             ::close(_sd);
             continue;
         }
-        
+
         // connect succeeded
         break;
     }
-    
+
     // Throw an exception if connect failed on all returned addresses
     if (current == NULL) {
         errmsg = "connect: No valid address found";
@@ -695,10 +699,10 @@ bool Socket::send(std::istream* data) {
     ssize_t bytes = 0;
     size_t length = 0;
     size_t sent = 0;
-    
+
     // Allocate a buffer for reading data from the stream before sending
     char buf[BUFFER_SIZE];
-    
+
     // Get length of the file
     length = get_size(data);
 
@@ -752,11 +756,11 @@ bool Socket::recv(std::istringstream& buffer, ssize_t len) {
     std::ostringstream received;
     buffer.str("");
     buffer.clear();
-    
+
     // Keep trying until 'len' bytes are received
     while (buffer.gcount() < len) {
         bytes = ::recv(_sd, buf, BUFFER_SIZE - 1, 0);
-        
+
         if (bytes == 0) {
             // socket was closed, return false
             return false;
@@ -776,10 +780,10 @@ bool Socket::recv(std::istringstream& buffer, ssize_t len) {
         // Add to stringstream buffer
         received << buf;
     }
-    
+
     // Update input buffer with received data
     buffer.str(received.str());
-    
+
     return true;
 }
 
@@ -798,7 +802,7 @@ bool Socket::recv(std::istringstream& buffer) {
     char buf[BUFFER_SIZE];
     buffer.str("");
     buffer.clear();
-    
+
     // Keep trying until something is received
     while (true) {
         bytes = ::recv(_sd, buf, BUFFER_SIZE - 1, 0);
@@ -817,7 +821,7 @@ bool Socket::recv(std::istringstream& buffer) {
                 throw std::runtime_error(errmsg);
             }
         }
-        
+
         // Append null terminator
         buf[bytes] = '\0';
         // Set stringstream buffer to received data
@@ -831,7 +835,7 @@ bool Socket::recv(std::istringstream& buffer) {
  * Closes the socket.
  *
  * This function immediately closes the underlying socket descriptor.
- * After this function is called, the object can no longer be used for 
+ * After this function is called, the object can no longer be used for
  * sending or receiving until another connection is established.
  */
 void Socket::close() {

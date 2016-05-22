@@ -86,7 +86,7 @@ public:
     Socket accept();
     void connect(const char* host, const char* port);
     bool send(std::string data);
-    bool send(std::istream& data);
+    bool send(std::ifstream& data);
     bool recv(std::string& buffer, ssize_t len);
     bool recv(std::string& buffer);
     void close();
@@ -245,6 +245,7 @@ void handle_client(Socket s) {
     } else if (cmd == GET_COMMAND) {
         // Get the file name from the next line
         std::string filename = get_line(input);
+        std::cout << "Checking for file " << filename << std::endl;
         // Verify that file exists
         struct stat sb;
         if (stat(filename.c_str(), &sb) == -1) {
@@ -273,9 +274,11 @@ void handle_client(Socket s) {
                 s.send(std::string("ERROR OCCURRED"));
                 break;
             }
+            s.close();
+            return;
         }
         // Open the file
-        std::istream file(filename.c_str(), std::ios::binary);
+        std::ifstream file(filename.c_str(), std::ios::binary);
         // Only send the file if it can be read
         if (file.good()) {
             // Read and send the file.
@@ -291,6 +294,8 @@ void handle_client(Socket s) {
                 << s.get_host_ip() << std::endl;
             output.emplace(msg.str().c_str());
             s.send(std::string("FILE READ ERROR"));
+            s.close();
+            return;
         }
         
         // Attempt to send the specified file to the client over new socket
@@ -381,7 +386,9 @@ std::string get_line(std::string& source) {
     else {
         temp = source.substr(0, eol);
         eol = source.find_first_not_of("\r\n\t ");
+        std::cout << "next pos: " << eol << std::endl;
         source = source.substr(eol);
+        std::cout << "remaining string: " << source << std::endl;
         return temp;
     }
 }
@@ -595,7 +602,7 @@ bool Socket::send(std::string data) {
  *
  * Returns whether the socket is still open.
  */
-bool Socket::send(std::istream& data) {
+bool Socket::send(std::ifstream& data) {
     ssize_t bytes = 0;
     size_t length = 0;
     size_t sent = 0;

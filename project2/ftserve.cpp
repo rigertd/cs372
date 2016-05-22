@@ -113,7 +113,7 @@ private:
 void handle_client(Socket);
 void display_output();
 std::vector<std::string> get_files_in_dir(const char*);
-std::string get_line(std::string&);
+std::string get_line(std::istringstream&);
 
 /*========================================================*
  * Global variables

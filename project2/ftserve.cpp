@@ -390,7 +390,7 @@ void free_buffer(std::istream*& buf, Command cmd) {
  *
  *  msg     The ostringstream containing the message to print.
  */
-void print_message(const std::ostringstream& msg) {
+void print_message(std::ostringstream& msg) {
     std::lock_guard<std::mutex> guard(output_mutex);
     output.emplace(msg.str().c_str());
     msg.str("");

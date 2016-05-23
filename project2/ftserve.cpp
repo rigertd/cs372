@@ -170,7 +170,7 @@ int main(int argc, char* argv[]) {
 
     // Register the signal handler
     struct sigaction sigact;
-    sigact.sa_handler = reapChildren;
+    sigact.sa_handler = handleInterrupt;
     sigemptyset(&sigact.sa_mask);
     if (sigaction(SIGINT, &sigact, NULL) < 0) {
         perror("sigaction");
@@ -216,6 +216,9 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    std::cout << "Shutting down server..." << std::endl;
+    // Close listen socket
+    s.close();
     // Join the output thread before terminating.
     output_thread.join();
 
@@ -544,6 +547,7 @@ void display_output() {
         }
 
     }
+    std::cout << "Stopping terminal logging..." << std::endl;
 }
 
 /**

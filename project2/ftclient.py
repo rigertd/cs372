@@ -42,9 +42,9 @@ def main():
     # Attempt to connect to server
     try:
         control_sock.connect(args.server_host, args.server_port)
-    except Exception as e:
-        print "connect: ", e
-        sys.exit(1)
+    except Exception as ex:
+        print("connect: " + ex)
+        exit(1)
 
     # Send command to server along with data port and file/dirname (if any)
     control_sock.send('{0} {1} {2}'.format(args.command, args.data_port, args.filename or args.dirname))
@@ -66,7 +66,9 @@ def main():
             exit(1)
 
         # Send acknowledgement over control connection
-        control_sock.send("ACK")
+        if not control_sock.send("ACK"):
+            print('Server closed control connection')
+            exit(1)
 
         # Accept the incoming connection
         try:
@@ -84,9 +86,16 @@ def main():
             print('Receiving new working directory from {0}:{1}'.format(args.server_host, args.data_port))
         # Receive the amount of data specified in the response
         is_open, data = data_sock.recv_all(int(response))
+        if not is_open:
+            print('Server closed data connection')
+            control_sock.close()
+            exit(1)
 
         # Acknowledge the receipt of the data
-        control_sock.send('ACK')
+        if not control_sock.send('ACK'):
+            print('Server closed control connection')
+            data_sock.close()
+            exit(1)
 
         # Close the data socket
         data_sock.close()

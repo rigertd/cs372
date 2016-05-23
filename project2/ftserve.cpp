@@ -6,22 +6,21 @@
 * Description:  A file transfer server written in C++.
 *
 *               This program accepts TCP connections from a ftclient client,
-*               receives a command, and sends a message or file data in response
-*               as long as the program is running.
+*               receives a command, and sends a message or file data in
+*               response as long as the program is running.
 *               Multiple ftclient connections can be handled at the same time.
 *
 *               The command line syntax is as follows:
 *
-*                   ftserve port
+*                   ftserve listen_port
 *
 *               This program takes the following arguments:
-*               - port      -- The TCP port on which to wait for client
-*                              connections.
+*               - listen_port   -- The TCP port on which to wait for client
+*                                  connections.
 \*********************************************************/
 #include <algorithm>
 #include <atomic>
 #include <fstream>
-#include <iomanip>
 #include <iostream>
 #include <map>
 #include <mutex>
@@ -121,10 +120,13 @@ private:
     void get_remote_addr(struct sockaddr* sa);
 }; // End of Socket class
 
+/**
+ * Enumerates the commands supported by ftserve.
+ */
 enum Command {
-    Command_LIST = 0,
-    Command_GET = (1 << 1),
-    Command_CD = (1 << 2)
+    Command_LIST = 0,       // List the files in the server's CWD
+    Command_GET = (1 << 1), // Get a specific file
+    Command_CD = (1 << 2)   // Change the server's CWD
 };
 
 /*========================================================*
@@ -138,7 +140,7 @@ size_t get_file_size(std::ifstream&);
 void print_message(std::ostringstream&);
 void free_buffer(std::istream*&, Command);
 size_t get_size(std::istream*);
-void handleInterrupt(int);
+void handle_interrupt(int);
 
 /*========================================================*
  * Global variables
@@ -168,9 +170,9 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    // Register the signal handler
+    // Register the signal handler for SIGINT to ensure orderly shutdown
     struct sigaction sigact;
-    sigact.sa_handler = handleInterrupt;
+    sigact.sa_handler = handle_interrupt;
     sigemptyset(&sigact.sa_mask);
     if (sigaction(SIGINT, &sigact, NULL) < 0) {
         perror("sigaction");
@@ -194,14 +196,12 @@ int main(int argc, char* argv[]) {
     }
 
     // Start a thread to handle the display of terminal output from
-    // connected clients.
+    // connected clients in a thread-safe manner.
     std::thread output_thread (display_output);
 
     // Accept incoming control connections until interrupt
     while (!is_shutting_down.load()) {
         try {
-            // The SocketStream class abstracts away the details of sending
-            // and receiving data over a socket.
             Socket s_client = s.accept();
             std::cout << "Connection from " << s_client.get_hostname() << "."
                 << std::endl;
@@ -216,6 +216,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // SIGINT received, start shutting down the server
     std::cout << "Shutting down server..." << std::endl;
     // Close listen socket
     s.close();
@@ -226,16 +227,156 @@ int main(int argc, char* argv[]) {
 }
 
 /**
- * Signals that the server is shutting down.
+ * Displays all output messages queued up by client connnections.
  *
- * This function is called when SIGINT is received.
- * It atomically sets the is_shutting_down global variable to true.
- *
- *  sig     The signal that triggered the call.
+ * This function is intended to be run in a separate thread.
+ * It uses thread-safe access to a global queue to avoid having
+ * multiple clients attempting to write to cout simultaneously.
  */
-void handleInterrupt(int sig) {
-    if (sig == SIGINT)
-        is_shutting_down.store(true);
+void display_output() {
+    // Keep running until server shuts down
+    while (!is_shutting_down.load()) {
+        // Sleep for 10 ms to avoid consuming too much CPU time
+        ::usleep(10000);
+        // Lock the output queue mutex for thread safety
+        std::lock_guard<std::mutex> guard(output_mutex);
+        // Display all queued output messages
+        while (!output.empty()) {
+            std::cout << output.front() << std::flush;
+            output.pop();
+        }
+
+    }
+    std::cout << "Stopping terminal logging..." << std::endl;
+}
+
+/**
+ * Frees any memory allocated for the input stream buffer.
+ *
+ *  buf     The buffer to free.
+ *  cmd     The command that the buffer was allocated for.
+ */
+void free_buffer(std::istream*& buf, Command cmd) {
+    if (buf != nullptr) {
+        switch (cmd) {
+        case Command_LIST:
+        case Command_CD:
+            free(static_cast<std::istringstream*>(buf));
+            buf = nullptr;
+            break;
+        case Command_GET:
+            free(static_cast<std::ifstream*>(buf));
+            buf = nullptr;
+            break;
+        }
+    }
+}
+
+/**
+ * Gets a vector of directories and filenames stored in the specified location.
+ *
+ *  name    The name of the directory to search for files.
+ *
+ * Returns a vector containing a string for each file or directory name.
+ */
+std::vector<std::string> get_files_in_dir(const char* name) {
+    std::vector<std::string> files;
+    struct dirent* entry = nullptr;
+    std::ostringstream oss;
+    struct stat sb;
+
+    // Attempt to open the specified directory
+    DIR *d = opendir(name);
+    if (d == nullptr) {
+        // Throw exception if opening directory fails
+        std::string errmsg("recv: ");
+        errmsg += ::strerror(errno);
+        throw std::runtime_error(errmsg);
+    }
+
+    // Set errno to 0 to detect any readdir errors
+    errno = 0;
+    // Attempt to read all entries and add them to file list
+    for (entry = readdir(d); entry != nullptr; entry = readdir(d)) {
+        // Check what kind of entry it is
+        if (::lstat(entry->d_name, &sb) == -1) {
+            // Some error occurred. Throw an exception
+            std::string errmsg("recv: ");
+            errmsg += ::strerror(errno);
+            throw std::runtime_error(errmsg);
+        }
+
+        // Prepend with flag indicating what kind of entry it is
+        switch (sb.st_mode & S_IFMT) {
+        case S_IFBLK:
+            oss << "b   ";
+            break;
+        case S_IFCHR:
+            oss << "c   ";
+            break;
+        case S_IFDIR:
+            oss << "d   ";
+            break;
+        case S_IFIFO:
+            oss << "p   ";
+            break;
+        case S_IFLNK:
+            oss << "l   ";
+            break;
+        case S_IFREG:
+            oss << "    ";
+            break;
+        case S_IFSOCK:
+            oss << "s   ";
+            break;
+        default:
+            oss << "?   ";
+            break;
+        }
+        oss << entry->d_name;
+        files.push_back(oss.str());
+        oss.str("");
+    }
+
+    if (errno != 0) {
+        // Some error occurred. Throw an exception
+        std::string errmsg("recv: ");
+        errmsg += ::strerror(errno);
+        throw std::runtime_error(errmsg);
+    }
+
+    // Everything worked if execution reaches here
+    return files;
+}
+
+/**
+ * Gets a trimmed line of text from the specified stream.
+ *
+ *  source  The istringstream to get a line of text from.
+ */
+std::string get_line(std::istringstream& source) {
+    std::string temp;
+    std::getline(source, temp);
+    size_t start_pos = temp.find_first_not_of("\r\n\t ");
+    size_t end_pos = temp.find_last_not_of("\r\n\t ");
+    return temp.substr(start_pos, end_pos + 1);
+}
+
+/**
+ * Gets the number of bytes available in an istream.
+ *
+ *  is  Pointer to the istream to get the size of.
+ *
+ * Returns the number of bytes in the specified istream.
+ */
+size_t get_size(std::istream* is) {
+    size_t length = -1;
+    if (is) {
+        is->seekg(0, is->end);
+        length = is->tellg();
+        is->seekg(0, is->beg);
+    }
+    return length;
 }
 
 /**
@@ -244,14 +385,14 @@ void handleInterrupt(int sig) {
  * The socket is for the control connection.
  * This function waits for the client to send a command through the socket,
  * parses the command, and then sends a message or data in response.
- * If the client requests the transfer of a file, this function
- * establishes a new connection with the client for sending file data.
+ * If the client request is valid, this function establishes a new connection
+ * with the client for sending the data.
  *
  * This function is intended to be run in a separate thread so that new
  * clients can continue to be accepted in the main thread.
  *
  *  s               The Socket for the connected client.
- *  server_port     The command port on the server.
+ *  server_port     The command socket port on the server.
  */
 void handle_client(Socket s, int server_port) {
     std::istringstream inbuf;
@@ -355,7 +496,7 @@ void handle_client(Socket s, int server_port) {
             print_message(msg);
         }
         else if (cmd_it->second == Command_GET) {
-            // Get the file name from the rest of the line
+            // Get the filename from the rest of the line
             std::string filename = get_line(inbuf);
             msg << "File \"" << filename << "\" requested on port " << data_port
                 << "." << std::endl;
@@ -492,27 +633,17 @@ void handle_client(Socket s, int server_port) {
 }
 
 /**
- * Frees any memory allocated for the input stream buffer.
+ * Sets a flag to notify all threads that the server is shutting down.
  *
- *  buf     The buffer to free.
- *  cmd     The command that the buffer was allocated for.
+ * This function is called when SIGINT is received.
+ * It atomically sets the is_shutting_down global variable to true.
+ *
+ *  sig     The signal that triggered the call.
  */
-void free_buffer(std::istream*& buf, Command cmd) {
-    if (buf != nullptr) {
-        switch (cmd) {
-        case Command_LIST:
-        case Command_CD:
-            free(static_cast<std::istringstream*>(buf));
-            buf = nullptr;
-            break;
-        case Command_GET:
-            free(static_cast<std::ifstream*>(buf));
-            buf = nullptr;
-            break;
-        }
-    }
+void handle_interrupt(int sig) {
+    if (sig == SIGINT)
+        is_shutting_down.store(true);
 }
-
 
 /**
  * Prints a message to the terminal window on the server in a thread-safe
@@ -524,137 +655,6 @@ void print_message(std::ostringstream& msg) {
     std::lock_guard<std::mutex> guard(output_mutex);
     output.emplace(msg.str().c_str());
     msg.str("");
-}
-
-/**
- * Displays all output messages queued up by client connnections.
- *
- * This function is intended to be run in a separate thread.
- * It uses thread-safe access to a global queue to avoid having
- * multiple clients attempting to write to cout simultaneously.
- */
-void display_output() {
-    // Keep running until server shuts down
-    while (!is_shutting_down.load()) {
-        // Sleep for 10 ms to avoid consuming too much CPU time
-        ::usleep(10000);
-        // Lock the output queue mutex for thread safety
-        std::lock_guard<std::mutex> guard(output_mutex);
-        // Display all queued output messages
-        while (!output.empty()) {
-            std::cout << output.front() << std::flush;
-            output.pop();
-        }
-
-    }
-    std::cout << "Stopping terminal logging..." << std::endl;
-}
-
-/**
- * Gets a vector of directories and filenames stored in the specified location.
- *
- *  name    The name of the directory to search for files.
- *
- * Returns a vector containing a string for each file or directory name.
- */
-std::vector<std::string> get_files_in_dir(const char* name) {
-    std::vector<std::string> files;
-    struct dirent* entry = nullptr;
-    std::ostringstream oss;
-    struct stat sb;
-
-    // Attempt to open the specified directory
-    DIR *d = opendir(name);
-    if (d == nullptr) {
-        // Throw exception if opening directory fails
-        std::string errmsg("recv: ");
-        errmsg += ::strerror(errno);
-        throw std::runtime_error(errmsg);
-    }
-
-    // Set errno to 0 to detect any readdir errors
-    errno = 0;
-    // Attempt to read all entries and add them to file list
-    for (entry = readdir(d); entry != nullptr; entry = readdir(d)) {
-        // Check what kind of entry it is
-        if (::lstat(entry->d_name, &sb) == -1) {
-            // Some error occurred. Throw an exception
-            std::string errmsg("recv: ");
-            errmsg += ::strerror(errno);
-            throw std::runtime_error(errmsg);
-        }
-
-        // Prepend with flag indicating what kind of entry it is
-        switch (sb.st_mode & S_IFMT) {
-        case S_IFBLK:
-            oss << "b   ";
-            break;
-        case S_IFCHR:
-            oss << "c   ";
-            break;
-        case S_IFDIR:
-            oss << "d   ";
-            break;
-        case S_IFIFO:
-            oss << "p   ";
-            break;
-        case S_IFLNK:
-            oss << "l   ";
-            break;
-        case S_IFREG:
-            oss << "    ";
-            break;
-        case S_IFSOCK:
-            oss << "s   ";
-            break;
-        default:
-            oss << "?   ";
-            break;
-        }
-        oss << entry->d_name;
-        files.push_back(oss.str());
-        oss.str("");
-    }
-
-    if (errno != 0) {
-        // Some error occurred. Throw an exception
-        std::string errmsg("recv: ");
-        errmsg += ::strerror(errno);
-        throw std::runtime_error(errmsg);
-    }
-
-    // Everything worked if execution reaches here
-    return files;
-}
-
-/**
- * Gets a trimmed line of text from the specified stream.
- *
- *  source  The istringstream to get a line of text from.
- */
-std::string get_line(std::istringstream& source) {
-    std::string temp;
-    std::getline(source, temp);
-    size_t start_pos = temp.find_first_not_of("\r\n\t ");
-    size_t end_pos = temp.find_last_not_of("\r\n\t ");
-    return temp.substr(start_pos, end_pos + 1);
-}
-
-/**
- * Gets the number of bytes available in an istream.
- *
- *  is  Pointer to the istream to get the size of.
- *
- * Returns the number of bytes in the specified istream.
- */
-size_t get_size(std::istream* is) {
-    size_t length = -1;
-    if (is) {
-        is->seekg(0, is->end);
-        length = is->tellg();
-        is->seekg(0, is->beg);
-    }
-    return length;
 }
 
 /**
@@ -809,8 +809,6 @@ void Socket::connect(const char* host, const char* port) {
 
     // Get the remote IP and port information
     get_remote_addr(reinterpret_cast<struct sockaddr*>(current->ai_addr));
-    // Store the original hostname
-    _hostname.assign(host);
 
     // Free memory used by remote host's address info
     ::freeaddrinfo(_info);
@@ -1012,6 +1010,7 @@ bool Socket::recv(std::istringstream& buffer) {
  * sending or receiving until another connection is established.
  */
 void Socket::close() {
+    ::shutdown(SHUT_RDWR);
     ::close(_sd);
 }
 

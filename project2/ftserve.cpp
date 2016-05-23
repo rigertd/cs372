@@ -18,30 +18,32 @@
 *               - listen_port   -- The TCP port on which to wait for client
 *                                  connections.
 \*********************************************************/
+// C++ includes
 #include <algorithm>
 #include <atomic>
+#include <exception>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <mutex>
 #include <queue>
-#include <csignal>
-#include <string>
 #include <sstream>
+#include <stdexcept>
+#include <string>
 #include <thread>
 
-#include <arpa/inet.h>
+// C and POSIX includes
 #include <cerrno>
+#include <csignal>
 #include <cstring>
-#include <exception>
-#include <stdexcept>
-#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <dirent.h>
 #include <netdb.h>
+#include <netinet/in.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <dirent.h>
 
 // Queue length for listen sockets
 #define SOCKET_CONNECTION_QUEUE 10
@@ -52,10 +54,10 @@
 #define LIST_COMMAND "LIST"
 // String for -g command
 #define GET_COMMAND "GET"
-// String for acknowledgement
-#define ACK_COMMAND "ACK"
 // String for -c command
 #define CD_COMMAND "CD"
+// String for acknowledgement
+#define ACK_COMMAND "ACK"
 
 /*========================================================*
  * Class declaration
@@ -78,21 +80,24 @@ public:
 
     /**
     * Destructor.
-    * Closes the socket and frees any memory allocated for address info.
+    * Frees any memory allocated for address info.
+    *
+    * This does not explicitly close the socket.
+    * Call the close() member function before the object falls out of scope.
     */
     ~Socket() {
         if (_info != nullptr) ::freeaddrinfo(_info);
     }
 
     // Function prototypes--see implementations at bottom for descriptions
-    void listen(const char* port);
     Socket accept();
+    void close();
     void connect(const char* host, const char* port);
-    bool send(std::string data);
-    bool send(std::istream* data);
+    void listen(const char* port);
     bool recv(std::istringstream& buffer, ssize_t len);
     bool recv(std::istringstream& buffer);
-    void close();
+    bool send(std::string data);
+    bool send(std::istream* data);
 
     /**
      * Gets the hostname of the remote host.
@@ -132,15 +137,14 @@ enum Command {
 /*========================================================*
  * Forward declarations
  *========================================================*/
-void handle_client(Socket, int);
 void display_output();
+void free_buffer(std::istream*&, Command);
 std::vector<std::string> get_files_in_dir(const char*);
 std::string get_line(std::istringstream&);
-size_t get_file_size(std::ifstream&);
-void print_message(std::ostringstream&);
-void free_buffer(std::istream*&, Command);
 size_t get_size(std::istream*);
+void handle_client(Socket, int);
 void handle_interrupt(int);
+void print_message(std::ostringstream&);
 
 /*========================================================*
  * Global variables
@@ -150,7 +154,7 @@ std::queue<std::string> output;
 // A mutex for ensuring thread-safe access to terminal output queue
 std::mutex output_mutex;
 
-// An atomic to signal that the server is shutting down
+// An atomic to signal to all threads that the server is shutting down
 std::atomic<bool> is_shutting_down(false);
 
 // A map to convert text commands into a Command enum value
@@ -560,6 +564,14 @@ void handle_client(Socket s, int server_port) {
             print_message(msg);
         }
 
+        // Verify that server is not shutting down before initiating transfer
+        if (is_shutting_down.load()) {
+            s.send(std::string("SERVER SHUTTING DOWN"));
+            s.close();
+            free_buffer(sendbuf, cmd_it->second);
+            return;
+        }
+        
         // Send the size of the data to send
         s.send(std::to_string(get_size(sendbuf)));
 

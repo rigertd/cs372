@@ -27,6 +27,7 @@
 #include <mutex>
 #include <queue>
 #include <cstring>
+#include <signal.h>
 #include <string>
 #include <sstream>
 #include <thread>
@@ -137,6 +138,7 @@ size_t get_file_size(std::ifstream&);
 void print_message(std::ostringstream&);
 void free_buffer(std::istream*&, Command);
 size_t get_size(std::istream*);
+void handleInterrupt(int);
 
 /*========================================================*
  * Global variables
@@ -163,7 +165,16 @@ int main(int argc, char* argv[]) {
     // Verify command line arguments
     if (argc != 2) {
         std::cout << "usage: " << argv[0] << " listen_port" << std::endl;
-        exit(1);
+        exit(EXIT_FAILURE);
+    }
+
+    // Register the signal handler
+    struct sigaction sigact;
+    sigact.sa_handler = reapChildren;
+    sigemptyset(&sigact.sa_mask);
+    if (sigaction(SIGINT, &sigact, NULL) < 0) {
+        perror("sigaction");
+        exit(EXIT_FAILURE);
     }
 
     // Instantiate a Socket object for listening
@@ -179,7 +190,7 @@ int main(int argc, char* argv[]) {
     catch (const std::runtime_error& ex) {
         // Exit with an error if any exceptions occur during listen/bind
         std::cout << ex.what() << std::endl;
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     // Start a thread to handle the display of terminal output from
@@ -187,7 +198,7 @@ int main(int argc, char* argv[]) {
     std::thread output_thread (display_output);
 
     // Accept incoming control connections until interrupt
-    while (true) {
+    while (!is_shutting_down.load()) {
         try {
             // The SocketStream class abstracts away the details of sending
             // and receiving data over a socket.
@@ -209,6 +220,19 @@ int main(int argc, char* argv[]) {
     output_thread.join();
 
     return 0;
+}
+
+/**
+ * Signals that the server is shutting down.
+ *
+ * This function is called when SIGINT is received.
+ * It atomically sets the is_shutting_down global variable to true.
+ *
+ *  sig     The signal that triggered the call.
+ */
+void handleInterrupt(int sig) {
+    if (sig == SIGINT)
+        is_shutting_down.store(true);
 }
 
 /**

@@ -25,16 +25,16 @@
 #include <map>
 #include <mutex>
 #include <queue>
-#include <cstring>
-#include <signal.h>
+#include <csignal>
 #include <string>
 #include <sstream>
 #include <thread>
 
+#include <arpa/inet.h>
 #include <cerrno>
+#include <cstring>
 #include <exception>
 #include <stdexcept>
-#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <sys/types.h>
@@ -1010,7 +1010,7 @@ bool Socket::recv(std::istringstream& buffer) {
  * sending or receiving until another connection is established.
  */
 void Socket::close() {
-    ::shutdown(SHUT_RDWR);
+    ::shutdown(_sd, SHUT_RDWR);
     ::close(_sd);
 }
 

@@ -3,15 +3,18 @@
 # CS372 Project 2: ftserve makefile
 
 CXX = g++
-CXXFLAGS = -std=c++11
+CXXFLAGS = -std=c++11 -pthread
 SOURCE = ftserve.cpp
 
 all: ftserve ftclient
+
+ftclient: ftclient.py
+	cp ftclient.py ftclient
 	chmod +x ftclient
 
 ftserve: $(SOURCE)
 	$(CXX) $(CXXFLAGS) $(SOURCE) -o ftserve
 
 clean:
-	$(RM) ftserve
-	chmod -x ftclient
+	$(RM) ftserve ftclient
+

@@ -6,8 +6,12 @@ CXX = g++
 CXXFLAGS = -std=c++11
 SOURCE = ftserve.cpp
 
-all: $(SOURCE)
+all: ftserve ftclient
+	chmod +x ftclient
+
+ftserve: $(SOURCE)
 	$(CXX) $(CXXFLAGS) $(SOURCE) -o ftserve
 
 clean:
-	$(RM) -f ftserve
+	$(RM) ftserve
+	chmod -x ftclient

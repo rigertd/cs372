@@ -35,8 +35,7 @@ def main():
     # Verify the command line arguments
     args = parse_args()
 
-    # Create a socket
-    # The Socket class abstracts away the details of the socket library
+    # Create a socket using a Socket wrapper class to simplify things
     control_sock = Socket()
 
     # Attempt to connect to server
@@ -46,14 +45,16 @@ def main():
         print("connect: " + ex)
         exit(1)
 
-    # Send command to server along with data port and file/dirname (if any)
-    control_sock.send('{0} {1} {2}'.format(args.command, args.data_port, args.filename or args.dirname))
-
     # Flag to indicate when socket is closed
     is_open = True
 
-    # Get response from server
-    is_open, response = control_sock.recv()
+    # Send the specified request to the server
+    is_open, response = make_request(
+        control_sock,                   # Socket to send the request over
+        args.command,                   # Request type
+        args.data_port,                 # Port to use for data socket
+        args.filename or args.dirname   # Name of the command target (or None)
+        )
 
     # Check if data size or an error message was returned
     if is_int(response):
@@ -84,6 +85,7 @@ def main():
             print('Receiving "{0}" from {1}:{2}'.format(args.filename, args.server_host, args.data_port))
         else:
             print('Receiving new working directory from {0}:{1}'.format(args.server_host, args.data_port))
+
         # Receive the amount of data specified in the response
         is_open, data = data_sock.recv_all(int(response))
         if not is_open:
@@ -100,15 +102,12 @@ def main():
         # Close the data socket
         data_sock.close()
 
-        # Display data if directory listing, otherwise write to disk
+        # Display data if directory listing or directory change
+        # Otherwise write to disk
         if args.command == 'LIST':
-            sys.stdout.write(data)
-            sys.stdout.flush()
+            print_no_lf(data)
         elif args.command == 'GET':
-            outfile = get_unique_filename(args.filename)
-            f = open(outfile, 'w')
-            f.write(data)
-            f.close()
+            save_to_file(data, get_unique_filename(args.filename))
             print('File transfer complete.')
         elif args.command == 'CD':
             print(data);
@@ -118,6 +117,41 @@ def main():
         print('{0}:{1} says {2}'.format(args.server_host, args.server_port, response))
         control_sock.close()
         exit(1)
+
+def print_no_lf(data):
+    """
+    Displays the specified data in the terminal window without a trailing
+    line feed.
+    """
+    sys.stdout.write(data)
+    sys.stdout.flush()
+
+def save_to_file(data, filename):
+    """
+    Saves the specified data to the specified filename.
+    """
+    f = open(filename, 'w')
+    f.write(data)
+    f.close()
+
+def make_request(control_sock, request, data_port, name):
+    """
+    Sends the specified request over the specified control socket.
+    The socket must already be connected.
+
+    control_sock - The socket to send the request and receive the response over
+    request      - The request command (GET, LIST, or CD)
+    data_port    - The port to use for the data connection
+    name         - The name of the command target or None for LIST
+
+    Returns whether the socket is still open and the response from the server.
+    """
+    # Send command to server along with data port and file/dirname (if any)
+    control_sock.send('{0} {1} {2}'.format(request, data_port, name))
+
+    # Get response from server
+    return control_sock.recv()
+
 
 def get_unique_filename(name):
     """

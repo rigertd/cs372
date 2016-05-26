@@ -64,7 +64,7 @@ Extra Credit Features
    at the same time. Each client is handled in a separate thread.
 2. A client can use the -c DIRNAME command to request a change of directory
    in the server. This affects the server's current directory for all clients.
-3. The server and client support the transfer to binary files as well as text.
+3. The server and client support the transfer of binary files as well as text.
 4. The server handles SIGINT and gracefully shuts down the listen socket and
    display thread.
 5. The directory list prepends each entry with a letter to indicate whether

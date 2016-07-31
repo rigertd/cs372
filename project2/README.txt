@@ -47,7 +47,7 @@ BUILD INSTRUCTIONS:
 
 USAGE INSTRUCTIONS:
 1. Start the client with the following syntax:
-   ./ftclient server_host server_port (-l | -g FILENAME | -c DIRNAME) data_port
+    ./ftclient server_host server_port (-l | -g FILENAME | -c DIRNAME) data_port
   * To list files, type the following:
     ./ftclient server_host server_port -l data_port
   * To get a file, type the following:
@@ -55,7 +55,7 @@ USAGE INSTRUCTIONS:
   * To change the server's directory, type the following:
     ./ftclient server_host server_port -c DIRNAME data_port
 2. For help, type the following:
-   ./ftclient -h
+    ./ftclient -h
 
 =================================================
 Extra Credit Features
